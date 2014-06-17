@@ -1,8 +1,0 @@
-setup.py
-cloudify_fabric_plugin.egg-info/PKG-INFO
-cloudify_fabric_plugin.egg-info/SOURCES.txt
-cloudify_fabric_plugin.egg-info/dependency_links.txt
-cloudify_fabric_plugin.egg-info/requires.txt
-cloudify_fabric_plugin.egg-info/top_level.txt
-fabric_plugin/__init__.py
-fabric_plugin/tasks.py
