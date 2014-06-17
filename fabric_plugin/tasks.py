@@ -32,24 +32,36 @@ DEFAULT_FORWARD_AGENT = True
 def run_command(ctx, **kwargs):
     """runs a fabric command
 
+    for each workflow operation (create, start, stop, etc..)
+    runs a list of commands
+
     :param ctx: CloudifyContext
     """
     _configure_fabric_env(ctx)
-    with settings(host_string=ctx):
-        # iterate over a list of commands to execute
-        for command in ctx.properties['commands']:
-            _run_with_retries(ctx, command)
+    if 'commands' in ctx.properties:
+        operation_simple_name = ctx.operation.split('.')[-1:].pop()
+        command_list = ctx.properties['commands'][operation_simple_name]
+        if not command_list:
+            ctx.logger.info("No command mapping found for operation {0}. "
+                            "Nothing to do.".format(operation_simple_name))
+            return None
+        with settings(host_string=ctx):
+            for command in command_list:
+                _run_with_retries(ctx, command)
 
 
 @operation
 def run_task(ctx, **kwargs):
     """runs a set of fabric tasks
 
-    Can receive a tasks file, a list of tasks and a list of excluded tasks,
-    create a list of tasks to run, and execute them.
+    imports a tasks file with basic workflow operations (create, start, stop..)
+    and runs the called task accordingly to the mapped operation in the
+    blueprint.
+
+    :param ctx: CloudifyContext
     """
     def _import_tasks_file(tasks_file):
-        """imports the tasks file
+        """returns the imported tasks file
 
         :param string tasks_file: path to file containing fabric tasks
         """
@@ -86,26 +98,31 @@ def run_task(ctx, **kwargs):
     #             tasks_list = [task for task in tasks_list if task != ex_task]
     #     return tasks_list
 
-    _configure_fabric_env(ctx)
-
     # tasks_list = ctx.properties['tasks_list']
     # excluded_list = ctx.properties['excluded_list']
     # tasks = _build_tasks_list(tasks_list, excluded_list)
-    all_tasks = _import_tasks_file(tasks_file)
 
+    _configure_fabric_env(ctx)
     if 'tasks_file' in ctx.properties:
-        tasks_file = ctx.download_resource(properties['tasks_file'])
+        tasks_file = ctx.download_resource(ctx.properties['tasks_file'])
+        all_tasks = _import_tasks_file(tasks_file)
         operation_simple_name = ctx.operation.split('.')[-1:].pop()
         if not hasattr(all_tasks, operation_simple_name):
             ctx.logger.info("No task mapping found for operation {0}. "
                             "Nothing to do.".format(operation_simple_name))
             return None
         with settings(host_string=ctx):
-            getattr(all_tasks, task)(ctx.properties)
+            getattr(all_tasks, operation_simple_name)(ctx.properties)
 
 
 def _configure_fabric_env(ctx):
     """configures fabric environment variables
+
+    Most of the configuration is overridable, like ssh_user, ssh_key_path,
+    ssh_password..
+    Some are defined by default like linewise, and keepalive.
+
+    :param ctx: CloudifyContext
     """
     try:
         # configure ssh user
@@ -129,7 +146,8 @@ def _configure_fabric_env(ctx):
     # should the command abort upon prompt for user
     env.abort_on_prompts = True
     # how many connection attempts to host should be initiated?
-    env.connection_attempts = ctx.properties['fabric_config']['connection_attempts'] \  # NOQA
+    env.connection_attempts = \
+        ctx.properties['fabric_config']['connection_attempts'] \
         if ctx.properties['fabric_config']['warn_only'] else DEFAULT_CONNECTION_ATTEMPTS  # NOQA
     env.keepalive = 0
     env.linewise = False
@@ -148,6 +166,9 @@ def _configure_fabric_env(ctx):
 
 def _run_with_retries(ctx, command):
     """runs a fabric command with retries
+
+    :param ctx: CloudifyContext
+    :param string command: command to run
     """
     # configure retries and sleep time
     attempts = ctx.properties['fabric_config']['attempts'] \
