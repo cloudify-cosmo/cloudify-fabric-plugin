@@ -1,0 +1,369 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>bash_runner.tasks &mdash; cloudify-fabric-plugin 1.0 documentation</title>
+  
+
+  
+  
+
+  
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  
+  
+    
+
+  
+
+  
+  
+    <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  
+
+  
+    <link rel="top" title="cloudify-fabric-plugin 1.0 documentation" href="../../index.html"/>
+        <link rel="up" title="Module code" href="../index.html"/> 
+
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.6.2/modernizr.min.js"></script>
+
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-nav-search">
+        <a href="../../index.html" class="fa fa-home"> cloudify-fabric-plugin</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+        
+        
+            <ul class="simple">
+</ul>
+
+        
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../../index.html">cloudify-fabric-plugin</a>
+      </nav>
+
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../../index.html">Docs</a> &raquo;</li>
+      
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      
+    <li>bash_runner.tasks</li>
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            
+  <h1>Source code for bash_runner.tasks</h1><div class="highlight"><pre>
+<span class="c">########</span>
+<span class="c"># Copyright (c) 2014 GigaSpaces Technologies Ltd. All rights reserved</span>
+<span class="c">#</span>
+<span class="c"># Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);</span>
+<span class="c"># you may not use this file except in compliance with the License.</span>
+<span class="c"># You may obtain a copy of the License at</span>
+<span class="c">#</span>
+<span class="c">#        http://www.apache.org/licenses/LICENSE-2.0</span>
+<span class="c">#</span>
+<span class="c"># Unless required by applicable law or agreed to in writing, software</span>
+<span class="c"># distributed under the License is distributed on an &quot;AS IS&quot; BASIS,</span>
+<span class="c">#    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
+<span class="c">#    * See the License for the specific language governing permissions and</span>
+<span class="c">#    * limitations under the License.</span>
+<span class="kn">import</span> <span class="nn">collections</span>
+<span class="kn">import</span> <span class="nn">subprocess</span>
+<span class="kn">import</span> <span class="nn">fcntl</span>
+<span class="kn">import</span> <span class="nn">select</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">errno</span>
+<span class="kn">from</span> <span class="nn">os.path</span> <span class="kn">import</span> <span class="n">dirname</span>
+
+<span class="kn">from</span> <span class="nn">cloudify</span> <span class="kn">import</span> <span class="n">utils</span>
+<span class="kn">from</span> <span class="nn">cloudify.utils</span> <span class="kn">import</span> <span class="n">get_manager_ip</span>
+<span class="kn">from</span> <span class="nn">cloudify.decorators</span> <span class="kn">import</span> <span class="n">operation</span>
+
+<span class="kn">from</span> <span class="nn">bash_runner</span> <span class="kn">import</span> <span class="n">resources</span>
+
+
+<span class="nd">@operation</span>
+<span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">script_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">log_all</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Execute bash scripts.</span>
+
+<span class="sd">        Parameters:</span>
+
+<span class="sd">            scripts - A dictionary mapping lifecycle events to script paths.</span>
+
+<span class="sd">            script_path - The path to the script relative</span>
+<span class="sd">                          to the blueprints root directory.</span>
+<span class="sd">                          Will only be used if the &#39;scripts&#39; argument is None.</span>
+<span class="sd">        Exceptions:</span>
+
+<span class="sd">            If both &#39;scripts&#39; and &#39;script_path&#39; is None.</span>
+<span class="sd">            A runtime exception will be raised since there is no</span>
+<span class="sd">            script to run.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">sh</span> <span class="o">=</span> <span class="n">get_script_to_run</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">script_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sh</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+    <span class="n">bash</span><span class="p">(</span><span class="n">sh</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">log_all</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s">&quot;[{0}] succeeded. return code 0&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">sh</span><span class="p">))</span>
+
+
+<div class="viewcode-block" id="get_script_to_run"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.get_script_to_run">[docs]</a><span class="k">def</span> <span class="nf">get_script_to_run</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">script_path</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">script_path</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">download_resource</span><span class="p">(</span><span class="n">script_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s">&#39;scripts&#39;</span> <span class="ow">in</span> <span class="n">ctx</span><span class="o">.</span><span class="n">properties</span><span class="p">:</span>
+        <span class="n">operation_simple_name</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">operation</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;.&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+        <span class="n">scripts</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">properties</span><span class="p">[</span><span class="s">&#39;scripts&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">operation_simple_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">scripts</span><span class="p">:</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&quot;No script mapping found for operation {0}. &quot;</span>
+                            <span class="s">&quot;Nothing to do.&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">operation_simple_name</span><span class="p">))</span>
+            <span class="k">return</span> <span class="bp">None</span>
+        <span class="k">return</span> <span class="n">ctx</span><span class="o">.</span><span class="n">download_resource</span><span class="p">(</span><span class="n">scripts</span><span class="p">[</span><span class="n">operation_simple_name</span><span class="p">])</span>
+
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s">&#39;No script to run&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="run_and_return_output"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.run_and_return_output">[docs]</a><span class="k">def</span> <span class="nf">run_and_return_output</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">script_path</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">log_all</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="n">sh</span> <span class="o">=</span> <span class="n">get_script_to_run</span><span class="p">(</span><span class="n">ctx</span><span class="p">,</span> <span class="n">script_path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sh</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">None</span>
+    <span class="k">return</span> <span class="n">bash</span><span class="p">(</span><span class="n">sh</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">log_all</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="strip_level"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.strip_level">[docs]</a><span class="k">def</span> <span class="nf">strip_level</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">level</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">line</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&#39;[{0}] &#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">level</span><span class="p">),</span> <span class="s">&#39;&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="is_info_log"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.is_info_log">[docs]</a><span class="k">def</span> <span class="nf">is_info_log</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;[INFO]&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="is_error_log"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.is_error_log">[docs]</a><span class="k">def</span> <span class="nf">is_error_log</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s">&#39;[ERROR]&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="bash"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.bash">[docs]</a><span class="k">def</span> <span class="nf">bash</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">log_all</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">execute</span><span class="p">(</span><span class="s">&quot;/bin/bash {0}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">log_all</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="execute"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.execute">[docs]</a><span class="k">def</span> <span class="nf">execute</span><span class="p">(</span><span class="n">command</span><span class="p">,</span> <span class="n">ctx</span><span class="p">,</span> <span class="n">log_all</span><span class="p">):</span>
+    <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Running command: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">command</span><span class="p">)</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">setup_environment</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
+    <span class="n">process</span> <span class="o">=</span> <span class="n">subprocess</span><span class="o">.</span><span class="n">Popen</span><span class="p">(</span><span class="n">command</span><span class="p">,</span> <span class="n">shell</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">stdout</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span>
+                               <span class="n">stderr</span><span class="o">=</span><span class="n">subprocess</span><span class="o">.</span><span class="n">PIPE</span><span class="p">,</span>
+                               <span class="n">env</span><span class="o">=</span><span class="n">env</span><span class="p">)</span>
+    <span class="n">make_async</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+    <span class="n">make_async</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+
+    <span class="n">stdout</span> <span class="o">=</span> <span class="nb">str</span><span class="p">()</span>
+    <span class="n">stderr</span> <span class="o">=</span> <span class="nb">str</span><span class="p">()</span>
+    <span class="n">return_code</span> <span class="o">=</span> <span class="bp">None</span>
+
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="c"># Wait for data to become available</span>
+        <span class="n">select</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="n">process</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span> <span class="n">process</span><span class="o">.</span><span class="n">stderr</span><span class="p">],</span> <span class="p">[],</span> <span class="p">[])</span>
+
+        <span class="n">return_code</span> <span class="o">=</span> <span class="n">process</span><span class="o">.</span><span class="n">poll</span><span class="p">()</span>
+
+        <span class="c"># Try reading some data from each</span>
+        <span class="n">stdout_piece</span> <span class="o">=</span> <span class="n">read_async</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+        <span class="n">stderr_piece</span> <span class="o">=</span> <span class="n">read_async</span><span class="p">(</span><span class="n">process</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">stdout_piece</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">is_info_log</span><span class="p">(</span><span class="n">stdout_piece</span><span class="p">)</span> <span class="ow">or</span> <span class="n">log_all</span><span class="p">:</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="n">strip_level</span><span class="p">(</span><span class="n">stdout_piece</span><span class="p">,</span>
+                                            <span class="s">&#39;INFO&#39;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">is_error_log</span><span class="p">(</span><span class="n">stdout_piece</span><span class="p">):</span>
+                <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">strip_level</span><span class="p">(</span><span class="n">stdout_piece</span><span class="p">,</span>
+                                             <span class="s">&#39;ERROR&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">stderr_piece</span><span class="p">:</span>
+            <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">stderr_piece</span><span class="p">)</span>
+
+        <span class="n">stdout</span> <span class="o">+=</span> <span class="n">stdout_piece</span>
+        <span class="n">stderr</span> <span class="o">+=</span> <span class="n">stderr_piece</span>
+
+        <span class="k">if</span> <span class="n">return_code</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stdout_piece</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">stderr_piece</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="n">ctx</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s">&#39;Done running command (return_code=</span><span class="si">%d</span><span class="s">): </span><span class="si">%s</span><span class="s">&#39;</span>
+                    <span class="o">%</span> <span class="p">(</span><span class="n">return_code</span><span class="p">,</span> <span class="n">command</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">return_code</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">stdout</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ProcessException</span><span class="p">(</span><span class="n">command</span><span class="p">,</span> <span class="n">return_code</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span><span class="p">)</span>
+
+
+<span class="c"># Helper function to add the O_NONBLOCK flag to a file descriptor</span></div>
+<div class="viewcode-block" id="make_async"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.make_async">[docs]</a><span class="k">def</span> <span class="nf">make_async</span><span class="p">(</span><span class="n">fd</span><span class="p">):</span>
+    <span class="n">fcntl</span><span class="o">.</span><span class="n">fcntl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">F_SETFL</span><span class="p">,</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">fcntl</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="n">fcntl</span><span class="o">.</span><span class="n">F_GETFL</span><span class="p">)</span> <span class="o">|</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">O_NONBLOCK</span><span class="p">)</span>
+
+
+<span class="c"># Helper function to read some data from a file descriptor,</span>
+<span class="c"># ignoring EAGAIN errors</span></div>
+<div class="viewcode-block" id="read_async"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.read_async">[docs]</a><span class="k">def</span> <span class="nf">read_async</span><span class="p">(</span><span class="n">fd</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fd</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">IOError</span><span class="p">,</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">e</span><span class="o">.</span><span class="n">errno</span> <span class="o">!=</span> <span class="n">errno</span><span class="o">.</span><span class="n">EAGAIN</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">e</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s">&#39;&#39;</span>
+
+</div>
+<div class="viewcode-block" id="flatten"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.flatten">[docs]</a><span class="k">def</span> <span class="nf">flatten</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">parent_key</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">):</span>
+    <span class="n">items</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">new_key</span> <span class="o">=</span> <span class="n">parent_key</span> <span class="o">+</span> <span class="s">&#39;_&#39;</span> <span class="o">+</span> <span class="n">k</span> <span class="k">if</span> <span class="n">parent_key</span> <span class="k">else</span> <span class="n">k</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">collections</span><span class="o">.</span><span class="n">MutableMapping</span><span class="p">):</span>
+            <span class="n">items</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">flatten</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">new_key</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">items</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">new_key</span><span class="p">,</span> <span class="n">v</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">items</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="setup_environment"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.setup_environment">[docs]</a><span class="k">def</span> <span class="nf">setup_environment</span><span class="p">(</span><span class="n">ctx</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Add some useful environment variables to the environment</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">env</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c"># See in context.py</span>
+    <span class="c"># https://github.com/CloudifySource</span>
+    <span class="c"># /cosmo-celery-common/blob/develop/cloudify/context.py</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_NODE_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">node_id</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_BLUEPRINT_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">blueprint_id</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_DEPLOYMENT_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">deployment_id</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_MANAGER_IP&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">get_manager_ip</span><span class="p">()</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_EXECUTION_ID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">execution_id</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+
+    <span class="n">logging_script_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">resources</span><span class="o">.</span><span class="n">__file__</span><span class="p">),</span>
+                                       <span class="s">&quot;logging.sh&quot;</span><span class="p">)</span>
+
+    <span class="n">file_server_script_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">resources</span><span class="o">.</span><span class="n">__file__</span><span class="p">),</span>
+                                           <span class="s">&quot;file_server.sh&quot;</span><span class="p">)</span>
+
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_LOGGING&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">logging_script_path</span>
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_FILE_SERVER&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">file_server_script_path</span>
+
+    <span class="n">url</span> <span class="o">=</span> <span class="s">&#39;{0}/{1}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+        <span class="n">utils</span><span class="o">.</span><span class="n">get_manager_file_server_blueprints_root_url</span><span class="p">(),</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">blueprint_id</span><span class="p">)</span>
+
+    <span class="n">env</span><span class="p">[</span><span class="s">&#39;CLOUDIFY_FILE_SERVER_BLUEPRINT_ROOT&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">url</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span>
+
+    <span class="c"># assuming properties are flat.</span>
+    <span class="c"># inject each property as an environment variable.</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">flatten</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">properties</span><span class="p">)</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">env</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s">&#39;utf-8&#39;</span><span class="p">)</span> \
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">unicode</span><span class="p">)</span> \
+            <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="k">else</span> <span class="nb">repr</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">env</span>
+
+</div>
+<div class="viewcode-block" id="ProcessException"><a class="viewcode-back" href="../../index.html#bash_runner.tasks.ProcessException">[docs]</a><span class="k">class</span> <span class="nc">ProcessException</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">command</span><span class="p">,</span> <span class="n">exit_code</span><span class="p">,</span> <span class="n">stdout</span><span class="p">,</span> <span class="n">stderr</span><span class="p">):</span>
+        <span class="ne">Exception</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stderr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">command</span> <span class="o">=</span> <span class="n">command</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exit_code</span> <span class="o">=</span> <span class="n">exit_code</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stdout</span> <span class="o">=</span> <span class="n">stdout</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stderr</span> <span class="o">=</span> <span class="n">stderr</span></div>
+</pre></div>
+
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2014, Gigaspaces.
+    </p>
+  </div>
+
+  <a href="https://github.com/snide/sphinx_rtd_theme">Sphinx theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>
+</footer>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  
+
+    <script type="text/javascript">
+        var DOCUMENTATION_OPTIONS = {
+            URL_ROOT:'../../',
+            VERSION:'1.0',
+            COLLAPSE_INDEX:false,
+            FILE_SUFFIX:'.html',
+            HAS_SOURCE:  true
+        };
+    </script>
+      <script type="text/javascript" src="../../_static/jquery.js"></script>
+      <script type="text/javascript" src="../../_static/underscore.js"></script>
+      <script type="text/javascript" src="../../_static/doctools.js"></script>
+
+  
+
+  
+  
+    <script type="text/javascript" src="../../_static/js/theme.js"></script>
+  
+
+  
+  
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.StickyNav.enable();
+      });
+  </script>
+   
+
+</body>
+</html>
