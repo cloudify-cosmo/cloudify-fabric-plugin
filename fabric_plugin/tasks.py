@@ -14,6 +14,8 @@
 #    * limitations under the License.
 
 from cloudify.decorators import operation
+from cloudify.manager import get_rest_client
+
 from fabric.api import run as execute
 from fabric.api import settings, env
 from time import sleep
@@ -45,7 +47,7 @@ def run_command(ctx, **kwargs):
             ctx.logger.info("No command mapping found for operation {0}. "
                             "Nothing to do.".format(operation_simple_name))
             return None
-        with settings(host_string=ctx):
+        with settings(host_string=_get_host_ip(ctx)):
             for command in command_list:
                 _run_with_retries(ctx, command)
 
@@ -111,8 +113,18 @@ def run_task(ctx, **kwargs):
             ctx.logger.info("No task mapping found for operation {0}. "
                             "Nothing to do.".format(operation_simple_name))
             return None
-        with settings(host_string=ctx):
+        with settings(host_string=_get_host_ip(ctx)):
             getattr(all_tasks, operation_simple_name)(ctx.properties)
+
+
+def _get_host_ip(ctx):
+    client = get_rest_client()
+    node_instance = client.node_instances.get(ctx.id)
+    host_id = node_instance.host_id
+    if host_id == ctx.id:
+        return node_instance.runtime_properties['ip']
+    host_node_instance = client.node_instances.get(host_id)
+    return host_node_instance.runtime_properties['ip']
 
 
 def _configure_fabric_env(ctx):
