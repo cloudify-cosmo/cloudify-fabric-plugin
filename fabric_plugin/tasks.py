@@ -25,9 +25,12 @@ import os
 DEFAULT_ATTEMPTS = 3
 DEFAULT_ATTEMPTS_SLEEP = 3
 DEFAULT_CONNECTION_ATTEMPTS = 5
+DEFAULT_SUDO = False
 DEFAULT_TIMEOUT = 10
 DEFAULT_WARN_ONLY = True
 DEFAULT_FORWARD_AGENT = True
+
+FABRIC_CONFIG = 'fabric_config'
 
 
 @operation
@@ -38,18 +41,22 @@ def run_command(ctx, **kwargs):
     runs a list of commands
 
     :param ctx: CloudifyContext
+    :returns: None if no commands were specified, else runs the commands.
+    :rtype: None
     """
-    _configure_fabric_env(ctx)
     if 'commands' in ctx.properties:
-        operation_simple_name = ctx.operation.split('.')[-1:].pop()
+        context_manager = ContextManager(ctx)
+        fabric_config = context_manager.get_fabric_config()
+        operation_simple_name = context_manager.get_operation_simple_name
+        _configure_fabric_env(ctx, context_manager, fabric_config)
         command_list = ctx.properties['commands'][operation_simple_name]
         if not command_list:
-            ctx.logger.info("No command mapping found for operation {0}. "
-                            "Nothing to do.".format(operation_simple_name))
+            ctx.logger.info("no command mapping found for operation {0}. "
+                            "nothing to do.".format(operation_simple_name))
             return None
-        with settings(host_string=_get_host_ip(ctx)):
+        with settings(host_string=context_manager.get_host_ip(ctx)):
             for command in command_list:
-                _run_with_retries(ctx, command)
+                _run_with_retries(ctx, command, fabric_config)
 
 
 @operation
@@ -61,6 +68,8 @@ def run_task(ctx, **kwargs):
     blueprint.
 
     :param ctx: CloudifyContext
+    :returns: None if no commands were specified, else runs the task.
+    :rtype: None
     """
     def _import_tasks_file(tasks_file):
         """returns the imported tasks file
@@ -104,30 +113,95 @@ def run_task(ctx, **kwargs):
     # excluded_list = ctx.properties['excluded_list']
     # tasks = _build_tasks_list(tasks_list, excluded_list)
 
-    _configure_fabric_env(ctx)
     if 'tasks_file' in ctx.properties:
+        context_manager = ContextManager(ctx)
+        fabric_config = context_manager.get_fabric_config()
+        operation_simple_name = context_manager.get_operation_simple_name
+        _configure_fabric_env(ctx, context_manager, fabric_config)
         tasks_file = ctx.download_resource(ctx.properties['tasks_file'])
         all_tasks = _import_tasks_file(tasks_file)
-        operation_simple_name = ctx.operation.split('.')[-1:].pop()
         if not hasattr(all_tasks, operation_simple_name):
-            ctx.logger.info("No task mapping found for operation {0}. "
-                            "Nothing to do.".format(operation_simple_name))
+            ctx.logger.info("no task mapping found for operation {0}. "
+                            "nothing to do.".format(operation_simple_name))
             return None
-        with settings(host_string=_get_host_ip(ctx)):
-            getattr(all_tasks, operation_simple_name)(ctx.properties)
+        with settings(host_string=context_manager.get_host_ip(ctx)):
+            ctx.logger.info('running task: {0} from {1}'.format(
+                operation_simple_name, tasks_file))
+            getattr(all_tasks, operation_simple_name)(ctx)
 
 
-def _get_host_ip(ctx):
-    client = get_rest_client()
-    node_instance = client.node_instances.get(ctx.id)
-    host_id = node_instance.host_id
-    if host_id == ctx.id:
-        return node_instance.runtime_properties['ip']
-    host_node_instance = client.node_instances.get(host_id)
-    return host_node_instance.runtime_properties['ip']
+class ContextManager():
+    """context handler to easily retrieve context info
+    """
+    def __init__(self, ctx):
+        """initializes fabric env configuration and context logger
+        """
+        self.ctx = ctx
+        self.fabric_config = ctx.properties['fabric_config']
+        self.logger = ctx.logger
+
+    def get_fabric_config(self):
+        """returns fabric env config properties"""
+        return self.fabric_config
+
+    def get_host_ip(self):
+        """returns the host ip to run tasks or commands on"""
+        self.logger.debug('getting remote host ip...')
+        client = get_rest_client()
+        node_instance = client.node_instances.get(self.ctx.id)
+        host_id = node_instance.host_id
+        if host_id == self.ctx.id:
+            ip = node_instance.runtime_properties['ip']
+        else:
+            host_node_instance = client.node_instances.get(host_id)
+            ip = host_node_instance.runtime_properties['ip']
+        self.logger.debug('remote host ip is: {0}'.format(ip))
+        return ip
+
+    def get_ssh_user(self):
+        """returns the ssh user to use when connecting to the remote host"""
+        self.logger.debug('retrieving ssh user...')
+        if 'ssh_user' not in self.fabric_config:
+            if self.ctx.bootstrap_context.cloudify_agent.user:
+                user = self.ctx.bootstrap_context.cloudify_agent.user
+            else:
+                self.logger.error('no user configured for ssh connections')
+                raise RuntimeError('ssh user definition missing')
+        else:
+            user = self.fabric_config['ssh_user']
+        self.logger.debug('ssh user is: {0}'.format(user))
+        return user
+
+    def get_ssh_key(self):
+        """returns the ssh key to use when connecting to the remote host"""
+        self.logger.debug('retrieving ssh key...')
+        if 'ssh_key' not in self.fabric_config:
+            if self.ctx.bootstrap_context.cloudify_agent.agent_key_path:
+                key = self.ctx.bootstrap_context.cloudify_agent.agent_key_path
+            else:
+                self.logger.debug('ssh key path not configured')
+                return None
+        else:
+            key = self.fabric_config['ssh_key']
+        self.logger.debug('ssh key path is: {0}'.format(key))
+        return key
+
+    def get_ssh_password(self):
+        """returns the ssh pwd to use when connecting to the remote host"""
+        self.logger.debug('retrieving ssh password...')
+        if 'ssh_pwd' in self.fabric_config:
+            pwd = self.fabric_config['ssh_pwd']
+        else:
+            self.logger.debug('ssh password not configured')
+            return None
+        self.logger.debug('ssh pwd is: {0}'.format(pwd))
+        return pwd
+
+    def get_operation_simple_name(self):
+        return self.ctx.operation.split('.')[-1:].pop()
 
 
-def _configure_fabric_env(ctx):
+def _configure_fabric_env(ctx, context_manager, fabric_config):
     """configures fabric environment variables
 
     Most of the configuration is overridable, like ssh_user, ssh_key_path,
@@ -135,63 +209,68 @@ def _configure_fabric_env(ctx):
     Some are defined by default like linewise, and keepalive.
 
     :param ctx: CloudifyContext
+    :param instance context_manager: ContextManager instance
+    :param dict fabric_config: configuration for running the commands
     """
-    try:
-        # configure ssh user
-        env.user = ctx.properties['fabric_config']['ssh_user']
-    except:
-        ctx.logger.error('no user configured for ssh connections')
-        raise RuntimeError('no user configured')
-    try:
-        # configure an ssk key file to use for remote connections
-        env.key_filename = ctx.properties['fabric_config']['ssh_key_path']
-    except KeyError:
-        # configure a password to use for remote connections
-        env.password = ctx.properties['fabric_config']['ssh_password']
-    except:
-        ctx.logger.error('missing ssh key or password')
-        raise RuntimeError('key or password must be supplied')
-
+    ctx.logger.info('configuring fabric environment...')
+    # configure ssh user
+    env.user = context_manager.get_ssh_user(ctx)
+    # configure an ssk key file to use for remote connections
+    env.key_filename = context_manager.get_ssh_key()
+    # configure a password to use for remote connections
+    env.password = context_manager.get_ssh_password()
+    if not env.password and not env.key_filename:
+        ctx.logger.error('you must supply at least one of ssh_key or ssh_pwd')
+        raise RuntimeError('access creds not supplied')
     # should the command abort (sys.exit) upon error?
-    env.warn_only = ctx.properties['fabric_config']['warn_only'] \
-        if ctx.properties['fabric_config']['warn_only'] else DEFAULT_WARN_ONLY
-    # should the command abort upon prompt for user
-    env.abort_on_prompts = True
+    env.warn_only = fabric_config['warn_only'] \
+        if fabric_config['warn_only'] \
+        else DEFAULT_WARN_ONLY
     # how many connection attempts to host should be initiated?
     env.connection_attempts = \
-        ctx.properties['fabric_config']['connection_attempts'] \
-        if ctx.properties['fabric_config']['warn_only'] else DEFAULT_CONNECTION_ATTEMPTS  # NOQA
+        fabric_config['connection_attempts'] \
+        if fabric_config['warn_only'] \
+        else DEFAULT_CONNECTION_ATTEMPTS
+    # timeout for a single connection to the host
+    env.timeout = fabric_config['timeout'] \
+        if fabric_config['timeout'] \
+        else DEFAULT_TIMEOUT
+    # forward the ssh agent to the remote machine
+    env.forward_agent = fabric_config['forward_agent'] \
+        if fabric_config['forward_agent'] \
+        else DEFAULT_FORWARD_AGENT
+
+    # only defaults
+    env.abort_on_prompts = True
     env.keepalive = 0
     env.linewise = False
     env.pool_size = 0
     env.skip_bad_hosts = False
-    # timeout for a single connection to the host
-    env.timeout = ctx.properties['fabric_config']['timeout'] \
-        if ctx.properties['fabric_config']['timeout'] else DEFAULT_TIMEOUT
-    # forward the ssh agent to the remote machine
-    env.forward_agent = ctx.properties['fabric_config']['forward_agent'] \
-        if ctx.properties['fabric_config']['forward_agent'] \
-        else DEFAULT_FORWARD_AGENT
     env.status = False
     env.disable_known_hosts = False
+    ctx.logger.info('environment configured successfully')
 
 
-def _run_with_retries(ctx, command):
+def _run_with_retries(ctx, command, fabric_config):
     """runs a fabric command with retries
 
     :param ctx: CloudifyContext
     :param string command: command to run
+    :param dict fabric_config: configuration for running the commands
     """
     # configure retries and sleep time
-    attempts = ctx.properties['fabric_config']['attempts'] \
-        if ctx.properties['fabric_config']['attempts'] else DEFAULT_ATTEMPTS
-    sleep_between_attempts = \
-        ctx.properties['fabric_config']['sleep_between_attempts'] \
-        if ctx.properties['fabric_config']['sleep_between_attempts'] \
+    attempts = fabric_config['attempts'] \
+        if 'attempts' in fabric_config \
+        else DEFAULT_ATTEMPTS
+    sleep_between_attempts = fabric_config['sleep_between_attempts'] \
+        if 'sleep_between_attempts' in fabric_config \
         else DEFAULT_ATTEMPTS_SLEEP
-    accepted_err_codes = \
-        ctx.properties['fabric_config']['accepted_err_codes'] \
-        if ctx.properties['fabric_config']['accepted_err_codes'] else []
+    accepted_err_codes = fabric_config['accepted_err_codes'] \
+        if 'accepted_err_codes' in fabric_config \
+        else []
+    sudo = fabric_config['use_sudo'] \
+        if 'use_sudo' in fabric_config \
+        else DEFAULT_SUDO
 
     if attempts < 1:
         raise RuntimeError('attempts must be at least 1')
@@ -199,13 +278,13 @@ def _run_with_retries(ctx, command):
         raise RuntimeError('sleep_time must be larger than 0')
 
     for execution in xrange(attempts):
-        ctx.logger.debug('running command: {0}'
+        ctx.logger.info('running command: {0}'
                   .format(command))
         r = execute('sudo {0}'.format(command)) \
-            if ctx.properties['fabric_config']['use_sudo'] \
+            if sudo \
             else execute(command)
         if r.succeeded or r.return_code in accepted_err_codes:
-            ctx.logger.debug('successfully ran command: {0}'
+            ctx.logger.info('successfully ran command: {0}'
                       .format(command))
             # SUCCESS
             return r
