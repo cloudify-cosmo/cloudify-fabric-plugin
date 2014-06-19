@@ -1,0 +1,226 @@
+# cloudify.types contains Cloudify's built-in types, relationships, workflows etc...
+
+imports:
+    - cloudify.types
+    - cloudify.bash
+
+plugins:
+    fabric_plugin:
+        derived_from: cloudify.plugins.manager_plugin
+        properties:
+            url: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/develop.zip
+
+    cloudstack_plugin:
+        derived_from: cloudify.plugins.manager_plugin
+        properties:
+            url: https://github.com/cloudify-cosmo/cloudify-cloudstack-plugin/archive/master.zip
+
+    # TOOD: do i need this?
+    # logstash_config_plugin:
+    #     derived_from: cloudify.plugins.manager_plugin
+    #     properties:
+    #         folder: logstash-config-plugin
+
+
+types:
+    exoscale_security_group:
+        derived_from: cloudify.types.security_group
+        properties:
+            -   auth:
+                    API_KEY: API_KEY
+                    API_SECRET_KEY: API_SECRET_KEY
+            - security_group
+            - rules: []
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: cloudstack_plugin.security_group.create
+                - delete: cloudstack_plugin.security_group.delete
+
+    exoscale_vm:
+        derived_from: cloudify.types.host
+        properties:
+            -   auth:
+                    API_KEY: API_KEY
+                    API_SECRET_KEY: API_SECRET_KEY
+            -   install_agent: false
+            -   server:
+
+                ### if defined, will serve as the hostname for the started instance,
+                ### otherwise, the node_id will be used
+                 #name: no_name            ### HOST_NAME""
+                    image_id: 299fd26a-2b4f-4ff4-acfd-23d2682d65ba
+                    size: Medium
+                    keypair_name: cloudify-agents-kp
+                    security_groups: ['cloudify-agents-sg', 'node_cellar_security_group']
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                -   delete: cloudstack_plugin.virtual_machine.delete
+                -   start: cloudstack_plugin.virtual_machine.start
+                -   stop: cloudstack_plugin.virtual_machine.stop
+            cloudify.interfaces.host:
+                -   get_state: cloudstack_plugin.virtual_machine.get_state
+
+    fabric_config:
+        properties:
+            -   fabric_config
+                    # ssh_user: [ssh user to use]
+                    # ssh_key: [ssh key file path to use]
+                    # ssh_pwd: [ssh password to use]
+                    # warn_only: [to warn only on errors rather than exit]
+                    # connection_attemptes: [connection attempts to remote host]
+                    # timeout: [timeout when connecting to remote host]
+                    # forward_agent: [forward ssh agent?]
+
+    fabric_task:
+        derived_from: fabric_config
+        properties:
+            -   tasks_file  # task file to use
+
+    fabric_commands:
+        derived_from: fabric_config
+        properties:
+            -   commands  # list_of_commands_to_run
+            -   fabric_config
+                    # attempts: [number of retry attempts]
+                    # sleep_between_attempts: [time to sleep between retries]
+                    # accepted_error_codes: [list of accepted error codes]
+                    # sudo: [use sudo?]
+
+    logstash_server:
+        derived_from: cloudify.types.bash.db_server
+        properties:
+            -   role
+            -   port
+
+    elasticsearch_kibana_server:
+        derived_from: cloudify.types.bash.app_server
+
+    nodejs_app:
+        derived_from: cloudify.types.bash.app_module
+        properties:
+            -   app_name
+            -   startup_script
+            -   git_url
+            -   git_branch
+            -   base_port
+            -   num_instances
+
+relationships:
+    logstash_connected_to_elasticsearch:
+        derived_from: cloudify.relationships.connected_to
+        source_interfaces:
+            cloudify.interfaces.relationship_lifecycle:
+                - postconfigure: nodecellar_config_plugin.tasks.get_mongo_host_and_port
+        properties:
+            - env_file_path
+
+
+blueprint:
+    name: elk
+    nodes:
+
+    - name: elasticsearch_kibana_security_group
+      type: exoscale_security_group
+      properties:
+        security_group:
+          name: elasticsearch_kibana_security_group
+        rules:
+              - cidr: 0.0.0.0/0
+                start_port: 3000
+              - cidr: 0.0.0.0/0
+                start_port: 9200
+
+    - name: logstash_vm
+      type: exoscale_vm
+      instances:
+          deploy: 1
+      relationships:
+        - target: elasticsearch_kibana_security_group
+          type: cloudify.relationships.depends_on
+
+    - name: elasticsearch_kibana_vm
+      type: exoscale_vm
+      instances:
+          deploy: 1
+      relationships:
+        - target: elasticsearch_kibana_security_group
+          type: cloudify.relationships.depends_on
+
+    - name: elasticsearch
+      type: elasticsearch_instance
+      properties:
+            role: mongod
+            port: 27017
+            tasks:
+                create: install_elasticsearch
+                start: start_elasticsearch
+                stop: stop_elasticsearch
+      relationships:
+        - target: elasticsearch_kibana_vm
+          type: cloudify.relationships.contained_in
+
+    - name: logstash
+      type: logstash_instance
+      properties:
+            tasks_file: URL_OF_TASKS_FILE
+            tasks:
+                create: install_logstash
+                configure: configure_logstash
+                start: start_logstash
+                stop: stop_logstash
+            logstash_config_file: URL_OF_CONFIG_FILE
+      relationships:
+        - type: cloudify.relationships.contained_in
+          target: logstash_vm
+
+    - name: kibana
+      type: kibana_instance
+      properties:
+            tasks_file: URL_OF_TASKS_FILE
+            tasks:
+                create: install_kibana
+                configure: configure_kibana
+      relationships:
+        - type: cloudify.relationships.contained_in
+          target: elasticsearch_kibana_vm
+        - type: cloudify.relationships.depends_on
+          target: elasticsearch_instance
+
+    - name: nginx
+      type: nginx_instance
+      properties:
+            tasks_file: URL_OF_TASKS_FILE
+            tasks:
+                create: install_nginx
+                configure: configure_nginx
+                start: start_nginx
+                stop: stop_nginx
+            nginx_config_file: URL_OF_CONFIG_FILE
+      relationships:
+        - type: cloudify.relationships.contained_in
+          target: elasticsearch_kibana_vm
+        - type: cloudify.relationships.depends_on
+          target: kibana_instance
+
+    - name: log_generator_app
+      type: python_app
+      properties:
+            app_name: log_generator
+            startup_script: generator.py
+            git_url: https://github.com/uric/nodecellar.git
+            git_branch: master
+            tasks:
+                create: install_generator
+                configure: configure_generator
+                start: start_generator
+                stop: stop_generator
+      relationships:
+        - type: cloudify.relationships.contained_in
+          target: logstash_vm
+        - type: cloudify.relationships.depends_on
+          target: logstash_instance
+        - type: nodecellar_connected_to_mongo
+          target: mongod
+          properties:
+            env_file_path: /tmp/mongo_host_and_port.sh
+

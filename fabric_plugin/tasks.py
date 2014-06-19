@@ -259,7 +259,7 @@ def _configure_fabric_env(ctx, context_manager, fabric_config):
     # how many connection attempts to host should be initiated?
     env.connection_attempts = \
         fabric_config['connection_attempts'] \
-        if fabric_config['warn_only'] \
+        if fabric_config['connection_attempts'] \
         else DEFAULT_CONNECTION_ATTEMPTS
     # timeout for a single connection to the host
     env.timeout = fabric_config['timeout'] \
