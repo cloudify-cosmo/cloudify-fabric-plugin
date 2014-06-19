@@ -45,15 +45,23 @@ def run_command(ctx, **kwargs):
     :rtype: None
     """
     if 'commands' in ctx.properties:
+        # create context manager instance
         context_manager = ContextManager(ctx)
+        # extract fabric configuration from context properties.
         fabric_config = context_manager.get_fabric_config()
+        # extract workflow task name
         operation_simple_name = context_manager.get_operation_simple_name
+        # configure fabric environment
         _configure_fabric_env(ctx, context_manager, fabric_config)
-        command_list = ctx.properties['commands'][operation_simple_name]
+        # get commands list from context
+        command_list = context_manager.get_commands_list(operation_simple_name)
+        # if no commands are supplied, return.
         if not command_list:
             ctx.logger.info("no command mapping found for operation {0}. "
                             "nothing to do.".format(operation_simple_name))
             return None
+        # iterate over the commands list and run the command
+        # the remote host's ip is retrieved prior to this
         with settings(host_string=context_manager.get_host_ip(ctx)):
             for command in command_list:
                 _run_with_retries(ctx, command, fabric_config)
@@ -114,16 +122,25 @@ def run_task(ctx, **kwargs):
     # tasks = _build_tasks_list(tasks_list, excluded_list)
 
     if 'tasks_file' in ctx.properties:
+        # create context manager instance
         context_manager = ContextManager(ctx)
+        # extract fabric configuration from context properties.
         fabric_config = context_manager.get_fabric_config()
+        # extract workflow task name
         operation_simple_name = context_manager.get_operation_simple_name
+        # configure fabric environment
         _configure_fabric_env(ctx, context_manager, fabric_config)
-        tasks_file = ctx.download_resource(ctx.properties['tasks_file'])
+        # download the tasks file
+        tasks_file = context_manager.get_tasks_file()
+        # imports the tasks file to retrieve its attributes
         all_tasks = _import_tasks_file(tasks_file)
+        # if no task file is supplied, return.
         if not hasattr(all_tasks, operation_simple_name):
             ctx.logger.info("no task mapping found for operation {0}. "
                             "nothing to do.".format(operation_simple_name))
             return None
+        # run the task
+        # the remote host's ip is retrieved prior to this
         with settings(host_string=context_manager.get_host_ip(ctx)):
             ctx.logger.info('running task: {0} from {1}'.format(
                 operation_simple_name, tasks_file))
@@ -147,11 +164,16 @@ class ContextManager():
     def get_host_ip(self):
         """returns the host ip to run tasks or commands on"""
         self.logger.debug('getting remote host ip...')
+        # initialize rest client
         client = get_rest_client()
+        # get the node instance id
         node_instance = client.node_instances.get(self.ctx.id)
+        # get the host id from the node instance
         host_id = node_instance.host_id
+        # if the node to run on is the vm itself, just return the ip
         if host_id == self.ctx.id:
             ip = node_instance.runtime_properties['ip']
+        # else, get the host_id for the node, and then return the ip
         else:
             host_node_instance = client.node_instances.get(host_id)
             ip = host_node_instance.runtime_properties['ip']
@@ -199,6 +221,14 @@ class ContextManager():
 
     def get_operation_simple_name(self):
         return self.ctx.operation.split('.')[-1:].pop()
+
+    def get_commands_list(self, operation_simple_name):
+        """returns a list of commands"""
+        return self.ctx.properties['commands'][operation_simple_name]
+
+    def get_tasks_file(self, operation_simple_name):
+        """downloads the tasks file and returns its path"""
+        return self.ctx.download_resource(self.ctx.properties['tasks_file'])
 
 
 def _configure_fabric_env(ctx, context_manager, fabric_config):
@@ -258,7 +288,8 @@ def _run_with_retries(ctx, command, fabric_config):
     :param string command: command to run
     :param dict fabric_config: configuration for running the commands
     """
-    # configure retries and sleep time
+    # configure retry count, sleep time between retries, accepted error codes
+    # and sudo state.
     attempts = fabric_config['attempts'] \
         if 'attempts' in fabric_config \
         else DEFAULT_ATTEMPTS
