@@ -161,6 +161,7 @@ class ContextManager():
         """returns fabric env config properties"""
         return self.fabric_config
 
+    # TODO: add this to plugins common
     def get_host_ip(self):
         """returns the host ip to run tasks or commands on"""
         self.logger.debug('getting remote host ip...')

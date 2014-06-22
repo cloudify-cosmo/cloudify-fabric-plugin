@@ -95,7 +95,7 @@ types:
     elasticsearch_kibana_server:
         derived_from: cloudify.types.bash.app_server
 
-    nodejs_app:
+    pylog_app:
         derived_from: cloudify.types.bash.app_module
         properties:
             -   app_name
@@ -127,8 +127,6 @@ blueprint:
         rules:
               - cidr: 0.0.0.0/0
                 start_port: 3000
-              - cidr: 0.0.0.0/0
-                start_port: 9200
 
     - name: logstash_vm
       type: exoscale_vm
@@ -203,12 +201,10 @@ blueprint:
           target: kibana_instance
 
     - name: log_generator_app
-      type: python_app
+      type: pylog_app
       properties:
-            app_name: log_generator
-            startup_script: generator.py
-            git_url: https://github.com/uric/nodecellar.git
-            git_branch: master
+            app_name: pylog
+            startup_script: pylog.py
             tasks:
                 create: install_generator
                 configure: configure_generator

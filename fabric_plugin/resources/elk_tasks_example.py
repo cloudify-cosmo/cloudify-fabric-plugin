@@ -1,5 +1,7 @@
 from fabric.api import run, cd
 import os
+# from fabric_plugin.tasks import ContextManager
+
 
 LOGSTASH_DIR = '/opt/logstash'
 LOGSTASH_FILE_NAME = 'logstash.tar.gz'
@@ -23,11 +25,19 @@ NGINX_SOURCE_REPOS = [
     'deb-src http://nginx.org/packages/mainline/ubuntu/ precise nginx',
 ]
 NGINX_SOURCE_KEY_URL = 'http://nginx.org/keys/nginx_signing.key'
+NGINX_CONFIG_FILE_PATH = os.path.join('/etc/nginx/conf.d', 'nginx.conf')
 
 GENERATOR_DIR = '/opt/generator'
 GENERATOR_FILE_NAME = 'pylog.tar.gz'
 GENERATOR_FILE_PATH = os.path.join(GENERATOR_DIR, GENERATOR_FILE_NAME)
 GENERATOR_URL = 'https://github.com/nir0s/pylog/archive/master.tar.gz'
+
+
+def instal_openjdk(ctx):
+    # ctx.logger.info('updating local repo...')
+    run('sudo apt-get update')
+    # ctx.logger.info('installing openjdk...')
+    run('sudo apt-get install openjdk-7-jdk')
 
 
 def install_logstash(ctx):
@@ -98,10 +108,11 @@ def install_nginx(ctx):
         NGINX_SOURCE_KEY_URL, key_path))
     run('sudo apt-key add {0}'.format(key_path))
     run('sudo apt-get install nginx -y')
-
-
-def configure_nginx(ctx):
-    return
+    ctx.runtime_properties['nginx_config_path'] = ctx.download_resource(
+        ctx.properties['nginx_config_file'])
+    run('mv {0} {1}'.format(
+        ctx.runtime_properties['nginx_config_path'],
+        NGINX_CONFIG_FILE_PATH))
 
 
 def start_nginx(ctx):
@@ -113,6 +124,7 @@ def stop_nginx(ctx):
 
 
 def install_generator(ctx):
+    run('sudo mkdir -p {}'.format(GENERATOR_DIR))
     with cd(GENERATOR_DIR):
         run('sudo wget {0} -O {1}'.format(GENERATOR_URL, GENERATOR_FILE_NAME))
         run('sudo tar -xzvf {} --strip=1')
