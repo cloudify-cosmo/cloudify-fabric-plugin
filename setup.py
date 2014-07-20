@@ -26,6 +26,6 @@ setup(
     license='LICENSE',
     description='Plugin for reomtely running fabric tasks and command',
     install_requires=[
-        'cloudify-plugins-common==3.0',
+        'cloudify-plugins-common>=3.0',
     ]
 )
