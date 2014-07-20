@@ -1,0 +1,146 @@
+##################################################################################
+# Cloudify Fabric built in types and plugins definitions.
+##################################################################################
+imports:
+    - http://www.getcloudify.org/spec/cloudify/{{ cloudify_version }}/types.yaml
+
+plugins:
+    fabric_plugin:
+        derived_from: cloudify.plugins.management_plugin
+        properties:
+            url: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/{{ plugin_branch }}.zip
+
+types:
+    # task types
+
+    # A web server configured with fabric tasks
+    cloudify.types.fabric_task.web_server:
+        derived_from: cloudify.types.web_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_task
+                - configure: fabric_plugin.tasks.run_task
+                - start: fabric_plugin.tasks.run_task
+                - stop: fabric_plugin.tasks.run_task
+                - delete: fabric_plugin.tasks.run_task
+        properties:
+            - tasks_file
+
+    # An app server configured with fabric tasks
+    cloudify.types.fabric_task.app_server:
+        derived_from: cloudify.types.app_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_task
+                - configure: fabric_plugin.tasks.run_task
+                - start: fabric_plugin.tasks.run_task
+                - stop: fabric_plugin.tasks.run_task
+                - delete: fabric_plugin.tasks.run_task
+        properties:
+            - tasks_file
+
+    # A db server configured with fabric tasks
+    cloudify.types.fabric_task.db_server:
+        derived_from: cloudify.types.db_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_task
+                - configure: fabric_plugin.tasks.run_task
+                - start: fabric_plugin.tasks.run_task
+                - stop: fabric_plugin.tasks.run_task
+                - delete: fabric_plugin.tasks.run_task
+        properties:
+            - tasks_file
+
+    # A message bus server configured with fabric tasks
+    cloudify.types.fabric_task.message_bus_server:
+        derived_from: cloudify.types.message_bus_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_task
+                - configure: fabric_plugin.tasks.run_task
+                - start: fabric_plugin.tasks.run_task
+                - stop: fabric_plugin.tasks.run_task
+                - delete: fabric_plugin.tasks.run_task
+        properties:
+            - tasks_file
+
+    # An app module configured with fabric tasks
+    cloudify.types.fabric_task.app_module:
+        derived_from: cloudify.types.app_module
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_task
+                - configure: fabric_plugin.tasks.run_task
+                - start: fabric_plugin.tasks.run_task
+                - stop: fabric_plugin.tasks.run_task
+                - delete: fabric_plugin.tasks.run_task
+        properties:
+            - tasks_file
+
+    # command types
+
+    # A web server configured with fabric commands
+    cloudify.types.fabric_cmd.web_server:
+        derived_from: cloudify.types.web_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_commands
+                - configure: fabric_plugin.tasks.run_commands
+                - start: fabric_plugin.tasks.run_commands
+                - stop: fabric_plugin.tasks.run_commands
+                - delete: fabric_plugin.tasks.run_commands
+        properties:
+            - commands
+
+    # An app server configured with fabric commands
+    cloudify.types.fabric_cmd.app_server:
+        derived_from: cloudify.types.app_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_commands
+                - configure: fabric_plugin.tasks.run_commands
+                - start: fabric_plugin.tasks.run_commands
+                - stop: fabric_plugin.tasks.run_commands
+                - delete: fabric_plugin.tasks.run_commands
+        properties:
+            - commands
+
+    # A db server configured with fabric commands
+    cloudify.types.fabric_cmd.db_server:
+        derived_from: cloudify.types.db_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_commands
+                - configure: fabric_plugin.tasks.run_commands
+                - start: fabric_plugin.tasks.run_commands
+                - stop: fabric_plugin.tasks.run_commands
+                - delete: fabric_plugin.tasks.run_commands
+        properties:
+            - commands
+
+    # A message bus server configured with fabric commands
+    cloudify.types.fabric_cmd.message_bus_server:
+        derived_from: cloudify.types.message_bus_server
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_commands
+                - configure: fabric_plugin.tasks.run_commands
+                - start: fabric_plugin.tasks.run_commands
+                - stop: fabric_plugin.tasks.run_commands
+                - delete: fabric_plugin.tasks.run_commands
+        properties:
+            - commands
+
+    # An app module configured with fabric commands
+    cloudify.types.fabric_cmd.app_module:
+        derived_from: cloudify.types.app_module
+        interfaces:
+            cloudify.interfaces.lifecycle:
+                - create: fabric_plugin.tasks.run_commands
+                - configure: fabric_plugin.tasks.run_commands
+                - start: fabric_plugin.tasks.run_commands
+                - stop: fabric_plugin.tasks.run_commands
+                - delete: fabric_plugin.tasks.run_commands
+        properties:
+            - commands

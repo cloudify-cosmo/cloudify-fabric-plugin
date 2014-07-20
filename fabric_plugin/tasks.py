@@ -91,36 +91,6 @@ def run_task(ctx, **kwargs):
         # TODO: check format
         sys.path.remove(os.path.dirname(tasks_file))
 
-    # def _build_tasks_list(tasks, excluded_tasks, all_tasks):
-    #     """builds the tasks list according to the excluded tasks list
-
-    #     :param list tasks: list of task names to execute
-    #     :param excluded_tasks: list of tasks to exclude
-    #     :param
-    #     """
-    #     ctx.logger.debug('building tasks list...')
-    #     tasks_list = tasks
-    #     if tasks:
-    #         # and raise if same task appears in both lists
-    #         if set(tasks) & set(excluded_tasks):
-    #             ctx.logger.error('your tasks list and excluded tasks '
-    #                              'list contain a similar item.')
-    #             raise RuntimeError('tasks list and excluded list '
-    #                                'are conflicting')
-    #     else:
-    #         for task in tasks:
-    #             if hasattr(all_tasks, 'task_{}'.format(task)):
-    #                 tasks_list.append(task)
-
-    #         # and rewrite the list after removing excluded tasks
-    #         for ex_task in excluded_tasks:
-    #             tasks_list = [task for task in tasks_list if task != ex_task]
-    #     return tasks_list
-
-    # tasks_list = ctx.properties['tasks_list']
-    # excluded_list = ctx.properties['excluded_list']
-    # tasks = _build_tasks_list(tasks_list, excluded_list)
-
     if 'tasks_file' in ctx.properties:
         # create context manager instance
         context_manager = ContextManager(ctx)

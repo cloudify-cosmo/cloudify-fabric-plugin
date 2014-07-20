@@ -1,222 +1,108 @@
-# cloudify.types contains Cloudify's built-in types, relationships, workflows etc...
-
+#######
+# Cloudify Blueprint which describes the nodecellar application
+# https://github.com/ccoenraets/nodecellar
+#
 imports:
-    - cloudify.types
-    - cloudify.bash
+     -  http://www.getcloudify.org/spec/cloudify/3.0/types.yaml
+     -  http://www.getcloudify.org/spec/fabric-plugin/1.0/plugin.yaml
 
 plugins:
-    fabric_plugin:
-        derived_from: cloudify.plugins.manager_plugin
+    nodecellar_config_plugin:
+        derived_from: cloudify.plugins.agent_plugin
         properties:
-            url: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/develop.zip
-
-    cloudstack_plugin:
-        derived_from: cloudify.plugins.manager_plugin
-        properties:
-            url: https://github.com/cloudify-cosmo/cloudify-cloudstack-plugin/archive/master.zip
-
-    # TOOD: do i need this?
-    # logstash_config_plugin:
-    #     derived_from: cloudify.plugins.manager_plugin
-    #     properties:
-    #         folder: logstash-config-plugin
+            folder: nodecellar-config-plugin
 
 
 types:
-    exoscale_security_group:
-        derived_from: cloudify.types.security_group
-        properties:
-            -   auth:
-                    API_KEY: API_KEY
-                    API_SECRET_KEY: API_SECRET_KEY
-            - security_group
-            - rules: []
-        interfaces:
-            cloudify.interfaces.lifecycle:
-                - create: cloudstack_plugin.security_group.create
-                - delete: cloudstack_plugin.security_group.delete
-
-    exoscale_vm:
-        derived_from: cloudify.types.host
-        properties:
-            -   auth:
-                    API_KEY: API_KEY
-                    API_SECRET_KEY: API_SECRET_KEY
-            -   install_agent: false
-            -   server:
-
-                ### if defined, will serve as the hostname for the started instance,
-                ### otherwise, the node_id will be used
-                 #name: no_name            ### HOST_NAME""
-                    image_id: 299fd26a-2b4f-4ff4-acfd-23d2682d65ba
-                    size: Medium
-                    keypair_name: cloudify-agents-kp
-                    security_groups: ['cloudify-agents-sg', 'node_cellar_security_group']
-        interfaces:
-            cloudify.interfaces.lifecycle:
-                -   delete: cloudstack_plugin.virtual_machine.delete
-                -   start: cloudstack_plugin.virtual_machine.start
-                -   stop: cloudstack_plugin.virtual_machine.stop
-            cloudify.interfaces.host:
-                -   get_state: cloudstack_plugin.virtual_machine.get_state
-
-    fabric_config:
-        properties:
-            -   fabric_config
-                    # ssh_user: [ssh user to use]
-                    # ssh_key: [ssh key file path to use]
-                    # ssh_pwd: [ssh password to use]
-                    # warn_only: [to warn only on errors rather than exit]
-                    # connection_attemptes: [connection attempts to remote host]
-                    # timeout: [timeout when connecting to remote host]
-                    # forward_agent: [forward ssh agent?]
-
-    fabric_task:
-        derived_from: fabric_config
-        properties:
-            -   tasks_file  # task file to use
-
-    fabric_commands:
-        derived_from: fabric_config
-        properties:
-            -   commands  # list_of_commands_to_run
-            -   fabric_config
-                    # attempts: [number of retry attempts]
-                    # sleep_between_attempts: [time to sleep between retries]
-                    # accepted_error_codes: [list of accepted error codes]
-                    # sudo: [use sudo?]
-
-    logstash_server:
-        derived_from: cloudify.types.bash.db_server
-        properties:
-            -   role
-            -   port
-
-    elasticsearch_kibana_server:
-        derived_from: cloudify.types.bash.app_server
-
     pylog_app:
-        derived_from: cloudify.types.bash.app_module
+        derived_from: cloudify.types.fabric.app_module
         properties:
-            -   app_name
-            -   startup_script
-            -   git_url
-            -   git_branch
-            -   base_port
-            -   num_instances
+            -   transport
+            -   formatter
+            -   gap
+            -   batch
 
 relationships:
-    logstash_connected_to_elasticsearch:
+    nodecellar_connected_to_mongo:
         derived_from: cloudify.relationships.connected_to
         source_interfaces:
             cloudify.interfaces.relationship_lifecycle:
                 - postconfigure: nodecellar_config_plugin.tasks.get_mongo_host_and_port
-        properties:
-            - env_file_path
-
 
 blueprint:
     name: elk
     nodes:
+        -   name: logstash_vm
+            type: cloudify.types.host
+            properties:
+                ip: 127.0.0.1
+                cloudify_agent:
+                    key: /home/vagrant/.ssh/cloudify_private_key
 
-    - name: elasticsearch_kibana_security_group
-      type: exoscale_security_group
-      properties:
-        security_group:
-          name: elasticsearch_kibana_security_group
-        rules:
-              - cidr: 0.0.0.0/0
-                start_port: 3000
+        -   name: elasticsearch_vm
+            type: cloudify.types.host
+            properties:
+                ip: 127.0.0.1
+                cloudify_agent:
+                    key: /home/vagrant/.ssh/cloudify_private_key
 
-    - name: logstash_vm
-      type: exoscale_vm
-      instances:
-          deploy: 1
-      relationships:
-        - target: elasticsearch_kibana_security_group
-          type: cloudify.relationships.depends_on
+        -   name: nginx
+            type: cloudify.types.fabric_task.web_server
+            properties:
+                kibana_port: 3000
+                nginx_source_repos:
+                  -   deb http://nginx.org/packages/mainline/ubuntu/ precise nginx
+                  -   deb-src http://nginx.org/packages/mainline/ubuntu/ precise nginx
+                nginx_source_key: http://nginx.org/keys/nginx_signing.key
+                nginx_config_file: configs/nginx_config_file.conf
+                tasks_file: task_files/nginx_tasks.py
+            relationships:
+                -   target: elasticsearch_vm
+                    type: cloudify.relationships.contained_in
 
-    - name: elasticsearch_kibana_vm
-      type: exoscale_vm
-      instances:
-          deploy: 1
-      relationships:
-        - target: elasticsearch_kibana_security_group
-          type: cloudify.relationships.depends_on
+        -   name: logstash
+            type: cloudify.types.fabric_task.app_server
+            properties:
+                logstash_port: 999
+                logstash_url: https://download.elasticsearch.org/logstash/logstash/packages/debian/logstash_1.4.2-1-2c0f5a1_all.deb
+                logstash_config_file: configs/logstash_config_file.conf
+                tasks_file: task_files/logstash_tasks.py
+            relationships:
+                -   target: logstash_vm
+                    type: cloudify.relationships.contained_in
 
-    - name: elasticsearch
-      type: elasticsearch_instance
-      properties:
-            role: mongod
-            port: 27017
-            tasks:
-                create: install_elasticsearch
-                start: start_elasticsearch
-                stop: stop_elasticsearch
-      relationships:
-        - target: elasticsearch_kibana_vm
-          type: cloudify.relationships.contained_in
+        -   name: elasticsearch
+            type: cloudify.types.fabric_task.db_server
+            properties:
+                ip: 11.0.0.7
+                elasticsearch_url: https://download.elasticsearch.org/elasticsearch/elasticsearch/elasticsearch-1.2.2.deb
+                tasks_file: task_files/elasticsearch_tasks.py
+            relationships:
+                -   target: elasticsearch_vm
+                    type: cloudify.relationships.contained_in
 
-    - name: logstash
-      type: logstash_instance
-      properties:
-            tasks_file: URL_OF_TASKS_FILE
-            tasks:
-                create: install_logstash
-                configure: configure_logstash
-                start: start_logstash
-                stop: stop_logstash
-            logstash_config_file: URL_OF_CONFIG_FILE
-      relationships:
-        - type: cloudify.relationships.contained_in
-          target: logstash_vm
+        -   name: kibana
+            type: cloudify.types.fabric_task.app_server
+            properties:
+                kibana_url: https://download.elasticsearch.org/kibana/kibana/kibana-3.1.0.tar.gz
+                tasks_file: task_files/kibana_tasks.py
+            relationships:
+                -   target: elasticsearch_vm
+                    type: cloudify.relationships.contained_in
+                -   target: elasticsearch
+                    type: cloudify.relationships.connected_to
 
-    - name: kibana
-      type: kibana_instance
-      properties:
-            tasks_file: URL_OF_TASKS_FILE
-            tasks:
-                create: install_kibana
-                configure: configure_kibana
-      relationships:
-        - type: cloudify.relationships.contained_in
-          target: elasticsearch_kibana_vm
-        - type: cloudify.relationships.depends_on
-          target: elasticsearch_instance
-
-    - name: nginx
-      type: nginx_instance
-      properties:
-            tasks_file: URL_OF_TASKS_FILE
-            tasks:
-                create: install_nginx
-                configure: configure_nginx
-                start: start_nginx
-                stop: stop_nginx
-            nginx_config_file: URL_OF_CONFIG_FILE
-      relationships:
-        - type: cloudify.relationships.contained_in
-          target: elasticsearch_kibana_vm
-        - type: cloudify.relationships.depends_on
-          target: kibana_instance
-
-    - name: log_generator_app
-      type: pylog_app
-      properties:
-            app_name: pylog
-            startup_script: pylog.py
-            tasks:
-                create: install_generator
-                configure: configure_generator
-                start: start_generator
-                stop: stop_generator
-      relationships:
-        - type: cloudify.relationships.contained_in
-          target: logstash_vm
-        - type: cloudify.relationships.depends_on
-          target: logstash_instance
-        - type: nodecellar_connected_to_mongo
-          target: mongod
-          properties:
-            env_file_path: /tmp/mongo_host_and_port.sh
-
+        -   name: pylog
+            type: pylog_app
+            properties:
+                transport: udp
+                formatter: json
+                gap: 1
+                batch: 5
+                pylog_config_file: configs/pylog_config_file.py
+                tasks_file: task_files/pylog_tasks.py
+            relationships:
+                -   type: cloudify.relationships.contained_in
+                    target: logstash_vm
+                -   type: cloudify.relationships.connected_to
+                    target: logstash
