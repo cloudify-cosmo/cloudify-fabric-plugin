@@ -10,7 +10,7 @@ plugins:
         properties:
             url: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/{{ plugin_branch }}.zip
 
-types:
+node_types:
     # task types
 
     # A web server configured with fabric tasks
@@ -24,7 +24,7 @@ types:
                 - stop: fabric_plugin.tasks.run_task
                 - delete: fabric_plugin.tasks.run_task
         properties:
-            - tasks_file
+            tasks_file: {}
 
     # An app server configured with fabric tasks
     cloudify.types.fabric_task.app_server:
@@ -37,7 +37,7 @@ types:
                 - stop: fabric_plugin.tasks.run_task
                 - delete: fabric_plugin.tasks.run_task
         properties:
-            - tasks_file
+            tasks_file: {}
 
     # A db server configured with fabric tasks
     cloudify.types.fabric_task.db_server:
@@ -50,7 +50,7 @@ types:
                 - stop: fabric_plugin.tasks.run_task
                 - delete: fabric_plugin.tasks.run_task
         properties:
-            - tasks_file
+            tasks_file: {}
 
     # A message bus server configured with fabric tasks
     cloudify.types.fabric_task.message_bus_server:
@@ -63,7 +63,7 @@ types:
                 - stop: fabric_plugin.tasks.run_task
                 - delete: fabric_plugin.tasks.run_task
         properties:
-            - tasks_file
+            tasks_file: {}
 
     # An app module configured with fabric tasks
     cloudify.types.fabric_task.app_module:
@@ -76,7 +76,7 @@ types:
                 - stop: fabric_plugin.tasks.run_task
                 - delete: fabric_plugin.tasks.run_task
         properties:
-            - tasks_file
+            tasks_file: {}
 
     # command types
 
@@ -91,7 +91,7 @@ types:
                 - stop: fabric_plugin.tasks.run_commands
                 - delete: fabric_plugin.tasks.run_commands
         properties:
-            - commands
+            commands: {}
 
     # An app server configured with fabric commands
     cloudify.types.fabric_cmd.app_server:
@@ -104,7 +104,7 @@ types:
                 - stop: fabric_plugin.tasks.run_commands
                 - delete: fabric_plugin.tasks.run_commands
         properties:
-            - commands
+            commands: {}
 
     # A db server configured with fabric commands
     cloudify.types.fabric_cmd.db_server:
@@ -117,7 +117,7 @@ types:
                 - stop: fabric_plugin.tasks.run_commands
                 - delete: fabric_plugin.tasks.run_commands
         properties:
-            - commands
+            commands: {}
 
     # A message bus server configured with fabric commands
     cloudify.types.fabric_cmd.message_bus_server:
@@ -130,7 +130,7 @@ types:
                 - stop: fabric_plugin.tasks.run_commands
                 - delete: fabric_plugin.tasks.run_commands
         properties:
-            - commands
+            commands: {}
 
     # An app module configured with fabric commands
     cloudify.types.fabric_cmd.app_module:
@@ -143,4 +143,4 @@ types:
                 - stop: fabric_plugin.tasks.run_commands
                 - delete: fabric_plugin.tasks.run_commands
         properties:
-            - commands
+            commands: {}
