@@ -1,13 +1,9 @@
-<<<<<<< HEAD
-=======
 # Byte-compiled / optimized / DLL files
 __pycache__/
->>>>>>> master
 *.py[cod]
 
 # C extensions
 *.so
-<<<<<<< HEAD
 *.iml
 
 # Packages
@@ -33,7 +29,6 @@ pip-log.txt
 .coverage
 .tox
 nosetests.xml
-=======
 
 # Distribution / packaging
 .Python
@@ -49,21 +44,15 @@ parts/
 sdist/
 var/
 *.egg-info/
-.installed.cfg
-*.egg
 
 # Installer logs
-pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
 .tox/
-.coverage
 .cache
-nosetests.xml
 coverage.xml
->>>>>>> master
 
 # Translations
 *.mo
@@ -72,8 +61,6 @@ coverage.xml
 .mr.developer.cfg
 .project
 .pydevproject
-<<<<<<< HEAD
-=======
 
 # Rope
 .ropeproject
@@ -83,12 +70,9 @@ coverage.xml
 *.pot
 
 # Sphinx documentation
-docs/_build/
 
-*.iml
 
 *COMMIT_MSG
 
 # QuickBuild
 .qbcache/
->>>>>>> master
