@@ -1,3 +1,5 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
 *.py[cod]
 
 # C extensions
@@ -28,6 +30,30 @@ pip-log.txt
 .tox
 nosetests.xml
 
+# Distribution / packaging
+.Python
+env/
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+
+# Installer logs
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.cache
+coverage.xml
+
 # Translations
 *.mo
 
@@ -35,3 +61,18 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Rope
+.ropeproject
+
+# Django stuff:
+*.log
+*.pot
+
+# Sphinx documentation
+
+
+*COMMIT_MSG
+
+# QuickBuild
+.qbcache/
