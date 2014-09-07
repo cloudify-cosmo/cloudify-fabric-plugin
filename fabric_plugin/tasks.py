@@ -44,7 +44,7 @@ def run_command(commands, **kwargs):
     :param commands: list of commands
     """
     context_manager = ContextManager(ctx)
-    fabric_config = context_manager.get_fabric_config()
+    fabric_config = context_manager.fabric_config
     _configure_fabric_env(ctx, context_manager, fabric_config)
     with settings(host_string=ctx.host_ip):
         for command in command_list:
@@ -70,7 +70,7 @@ def run_task(tasks_file, task_name, **kwargs):
             sys.path.remove(os.path.dirname(tasks_file))
 
     context_manager = ContextManager(ctx)
-    fabric_config = context_manager.get_fabric_config()
+    fabric_config = context_manager.fabric_config
     _configure_fabric_env(ctx, context_manager, fabric_config)
     tasks_module = _import_tasks_module(tasks_file)
     with settings(host_string=ctx.host_ip):
@@ -87,12 +87,13 @@ class ContextManager():
         """initializes fabric env configuration and context logger
         """
         self.ctx = ctx
-        self.fabric_config = ctx.properties['fabric_config']
+        self._fabric_config = ctx.properties['fabric_config']
         self.logger = ctx.logger
 
-    def get_fabric_config(self):
+    @property
+    def fabric_config(self):
         """returns fabric env config properties"""
-        return self.fabric_config
+        return self._fabric_config
 
     def get_ssh_user(self):
         """returns the ssh user to use when connecting to the remote host"""
