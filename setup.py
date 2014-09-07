@@ -13,19 +13,19 @@
 #  * See the License for the specific language governing permissions and
 #  * limitations under the License.
 
-__author__ = 'nir0s'
 
 from setuptools import setup
 
 setup(
     name='cloudify-fabric-plugin',
-    version='1.0',
-    author='nir0s',
-    author_email='nirc@gigaspaces.com',
+    version='1.1a3',
+    author='Gigaspaces',
+    author_email='cosmo-admin@gigaspaces.com',
     packages=['fabric_plugin'],
     license='LICENSE',
     description='Plugin for reomtely running fabric tasks and command',
     install_requires=[
-        'cloudify-plugins-common>=3.0',
+        'cloudify-plugins-common==3.1a3',
+        'fabric==1.8.3',
     ]
 )
