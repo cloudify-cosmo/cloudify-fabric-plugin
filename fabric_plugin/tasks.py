@@ -13,14 +13,17 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
-from cloudify.decorators import operation
-from cloudify.manager import get_rest_client
 
-from fabric.api import run as execute
-from fabric.api import settings, env
 from time import sleep
 import sys
 import os
+
+from fabric.api import run as execute
+from fabric.api import settings, env
+
+from cloudify.decorators import operation
+from cloudify.manager import get_rest_client
+
 
 DEFAULT_ATTEMPTS = 3
 DEFAULT_ATTEMPTS_SLEEP = 3
