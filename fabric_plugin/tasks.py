@@ -14,16 +14,17 @@
 #    * limitations under the License.
 
 
-from time import sleep
 import sys
 import os
+import time
+import importlib
 
 from fabric.api import run as execute
 from fabric.api import settings, env
 
 from cloudify.decorators import operation
 from cloudify.manager import get_rest_client
-
+from cloudify import ctx
 
 DEFAULT_ATTEMPTS = 3
 DEFAULT_ATTEMPTS_SLEEP = 3
@@ -37,87 +38,46 @@ FABRIC_CONFIG = 'fabric_config'
 
 
 @operation
-def run_command(ctx, **kwargs):
-    """runs a fabric command
+def run_command(commands, **kwargs):
+    """runs a list of fabric commands
 
-    for each workflow operation (create, start, stop, etc..)
-    runs a list of commands
-
-    :param ctx: CloudifyContext
-    :returns: None if no commands were specified, else runs the commands.
-    :rtype: None
+    :param commands: list of commands
     """
-    if 'commands' in ctx.properties:
-        # create context manager instance
-        context_manager = ContextManager(ctx)
-        # extract fabric configuration from context properties.
-        fabric_config = context_manager.get_fabric_config()
-        # extract workflow task name
-        operation_simple_name = context_manager.get_operation_simple_name
-        # configure fabric environment
-        _configure_fabric_env(ctx, context_manager, fabric_config)
-        # get commands list from context
-        command_list = context_manager.get_commands_list(operation_simple_name)
-        # if no commands are supplied, return.
-        if not command_list:
-            ctx.logger.info("no command mapping found for operation {0}. "
-                            "nothing to do.".format(operation_simple_name))
-            return None
-        # iterate over the commands list and run the command
-        # the remote host's ip is retrieved prior to this
-        with settings(host_string=context_manager.get_host_ip(ctx)):
-            for command in command_list:
-                _run_with_retries(ctx, command, fabric_config)
+    context_manager = ContextManager(ctx)
+    fabric_config = context_manager.get_fabric_config()
+    _configure_fabric_env(ctx, context_manager, fabric_config)
+    with settings(host_string=ctx.host_ip):
+        for command in command_list:
+            _run_with_retries(ctx, command, fabric_config)
 
 
 @operation
-def run_task(ctx, **kwargs):
-    """runs a set of fabric tasks
+def run_task(tasks_file, task_name, **kwargs):
+    """runs the specified fabric task loaded from 'tasks_file'
 
-    imports a tasks file with basic workflow operations (create, start, stop..)
-    and runs the called task accordingly to the mapped operation in the
-    blueprint.
-
-    :param ctx: CloudifyContext
-    :returns: None if no commands were specified, else runs the task.
-    :rtype: None
+    :param tasks_file: the tasks file
+    :param task_name: the task name to run in 'tasks_file'
     """
-    def _import_tasks_file(tasks_file):
-        """returns the imported tasks file
-
-        :param string tasks_file: path to file containing fabric tasks
-        """
+    def _import_tasks_module(tasks_file):
+        tasks_file = ctx.download_resource(tasks_file)
         ctx.logger.debug('importing tasks file...')
         sys.path.append(os.path.dirname(tasks_file))
-        return __import__(os.path.basename(os.path.splitext(
+        try:
+            module = importlib.import_module(
+                os.path.basename(os.path.splitext(
             os.path.join(tasks_file))[0]))
-        # TODO: check format
-        sys.path.remove(os.path.dirname(tasks_file))
+        finally:
+            sys.path.remove(os.path.dirname(tasks_file))
 
-    if 'tasks_file' in ctx.properties:
-        # create context manager instance
-        context_manager = ContextManager(ctx)
-        # extract fabric configuration from context properties.
-        fabric_config = context_manager.get_fabric_config()
-        # extract workflow task name
-        operation_simple_name = context_manager.get_operation_simple_name
-        # configure fabric environment
-        _configure_fabric_env(ctx, context_manager, fabric_config)
-        # download the tasks file
-        tasks_file = context_manager.get_tasks_file()
-        # imports the tasks file to retrieve its attributes
-        all_tasks = _import_tasks_file(tasks_file)
-        # if no task file is supplied, return.
-        if not hasattr(all_tasks, operation_simple_name):
-            ctx.logger.info("no task mapping found for operation {0}. "
-                            "nothing to do.".format(operation_simple_name))
-            return None
-        # run the task
-        # the remote host's ip is retrieved prior to this
-        with settings(host_string=context_manager.get_host_ip(ctx)):
-            ctx.logger.info('running task: {0} from {1}'.format(
-                operation_simple_name, tasks_file))
-            getattr(all_tasks, operation_simple_name)(ctx)
+    context_manager = ContextManager(ctx)
+    fabric_config = context_manager.get_fabric_config()
+    _configure_fabric_env(ctx, context_manager, fabric_config)
+    tasks_module = _import_tasks_module(tasks_file)
+    with settings(host_string=ctx.host_ip):
+        ctx.logger.info('running task: {0} from {1}'.format(
+            operation_simple_name, tasks_file))
+        task = getattr(tasks_module, task_name)
+        task(ctx)
 
 
 class ContextManager():
@@ -133,26 +93,6 @@ class ContextManager():
     def get_fabric_config(self):
         """returns fabric env config properties"""
         return self.fabric_config
-
-    # TODO: add this to plugins common
-    def get_host_ip(self):
-        """returns the host ip to run tasks or commands on"""
-        self.logger.debug('getting remote host ip...')
-        # initialize rest client
-        client = get_rest_client()
-        # get the node instance id
-        node_instance = client.node_instances.get(self.ctx.id)
-        # get the host id from the node instance
-        host_id = node_instance.host_id
-        # if the node to run on is the vm itself, just return the ip
-        if host_id == self.ctx.id:
-            ip = node_instance.runtime_properties['ip']
-        # else, get the host_id for the node, and then return the ip
-        else:
-            host_node_instance = client.node_instances.get(host_id)
-            ip = host_node_instance.runtime_properties['ip']
-        self.logger.debug('remote host ip is: {0}'.format(ip))
-        return ip
 
     def get_ssh_user(self):
         """returns the ssh user to use when connecting to the remote host"""
@@ -192,17 +132,6 @@ class ContextManager():
             return None
         self.logger.debug('ssh pwd is: {0}'.format(pwd))
         return pwd
-
-    def get_operation_simple_name(self):
-        return self.ctx.operation.split('.')[-1:].pop()
-
-    def get_commands_list(self, operation_simple_name):
-        """returns a list of commands"""
-        return self.ctx.properties['commands'][operation_simple_name]
-
-    def get_tasks_file(self, operation_simple_name):
-        """downloads the tasks file and returns its path"""
-        return self.ctx.download_resource(self.ctx.properties['tasks_file'])
 
 
 def _configure_fabric_env(ctx, context_manager, fabric_config):
@@ -296,7 +225,7 @@ def _run_with_retries(ctx, command, fabric_config):
         # RETRY
         ctx.logger.warning('failed to run: {0} -retrying ({1}/{2})'.format(
             command, execution + 1, attempts))
-        sleep(sleep_between_attempts)
+        time.sleep(sleep_between_attempts)
     ctx.logger.error('failed to run: {0}, {1}'.format(command, r.stderr))
     # FAILURE
     return r
