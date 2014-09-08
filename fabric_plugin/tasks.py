@@ -18,7 +18,7 @@ import sys
 import os
 import importlib
 
-from fabric import api
+from fabric import api as fabric_api
 
 from cloudify.decorators import operation
 from cloudify.exceptions import NonRecoverableError
@@ -50,8 +50,21 @@ def run_task(tasks_file, task_name, fabric_env, **kwargs):
     """
     task = _get_task(ctx, tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
-    with api.settings(**_fabric_env(ctx, fabric_env)):
+    with fabric_api.settings(**_fabric_env(ctx, fabric_env)):
         task(ctx)
+
+
+@operation
+def run_commands(commands, fabric_env, **kwargs):
+    """runs the provider 'commands' in sequence
+
+    :param commands: a list of commands to run
+    :param fabric_env: fabric configuration
+    """
+    with fabric_api.settings(**_fabric_env(ctx, fabric_env)):
+        for command in commands:
+            ctx.logger.info('running command: {0}'.format(command))
+            fabric_api.run(command)
 
 
 def _get_task(_ctx, tasks_file, task_name):

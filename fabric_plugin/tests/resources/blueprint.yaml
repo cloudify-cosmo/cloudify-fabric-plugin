@@ -7,9 +7,6 @@ plugins:
         derived_from: cloudify.plugins.manager_plugin
 
 inputs:
-    tasks_file:
-        default: fabric_tasks.py
-
     fabric_env:
         default:
             user: vagrant
@@ -22,9 +19,16 @@ node_templates:
         type: cloudify.types.base
         interfaces:
             cloudify.interfaces.lifecycle:
+                - create:
+                    mapping: fabric.fabric_plugin.tasks.run_commands
+                    properties:
+                        commands:
+                            - echo this is great
+                            - ls /
+                        fabric_env: { get_input: fabric_env }
                 - start:
                     mapping: fabric.fabric_plugin.tasks.run_task
                     properties:
                         task_name: task
-                        tasks_file: { get_input: tasks_file }
+                        tasks_file: fabric_tasks.py
                         fabric_env: { get_input: fabric_env }
