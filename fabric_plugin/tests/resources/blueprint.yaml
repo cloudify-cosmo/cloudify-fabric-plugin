@@ -8,10 +8,8 @@ plugins:
 
 inputs:
     fabric_env:
-        default:
-            user: vagrant
-            key_filename: /home/dan/.vagrant.d/insecure_private_key
-            host_string: 11.0.0.7
+        description: >
+            fabric environment configuration.
 
 
 node_templates:
