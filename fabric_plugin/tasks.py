@@ -24,11 +24,11 @@ from cloudify import ctx
 from fabric_plugin import exec_env
 
 FABRIC_ENV_DEFAULTS = {
-    'warn_only': True,
+    'warn_only': False,
     'connection_attempts': 5,
     'timeout': 10,
     'forward_agent': True,
-    'abort_on_prompts': False,
+    'abort_on_prompts': True,
     'keepalive': 0,
     'linewise': False,
     'pool_size': 0,
