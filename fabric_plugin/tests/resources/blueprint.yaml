@@ -7,7 +7,6 @@ plugins:
         derived_from: cloudify.plugins.manager_plugin
 
 inputs:
-
     tasks_file:
         default: fabric_tasks.py
 
@@ -18,13 +17,9 @@ inputs:
             host_string: 11.0.0.7
 
 
-node_types:
-    fabric_type:
-        derived_from: cloudify.types.base
-
 node_templates:
     node:
-        type: fabric_type
+        type: cloudify.types.base
         interfaces:
             cloudify.interfaces.lifecycle:
                 - start:

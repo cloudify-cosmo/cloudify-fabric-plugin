@@ -16,13 +16,11 @@
 
 import sys
 import os
-import time
 import importlib
 
 from fabric import api
 
 from cloudify.decorators import operation
-from cloudify.manager import get_rest_client
 from cloudify.exceptions import NonRecoverableError
 from cloudify import ctx
 
@@ -48,35 +46,42 @@ def run_task(tasks_file, task_name, fabric_env, **kwargs):
 
     :param tasks_file: the tasks file
     :param task_name: the task name to run in 'tasks_file'
+    :param fabric_env: fabric configuration
     """
-    def _import_tasks_module(tasks_file):
-        tasks_file = ctx.download_resource(tasks_file)
-        ctx.logger.debug('importing tasks file...')
-        sys.path.append(os.path.dirname(tasks_file))
-        try:
-            return importlib.import_module(os.path.basename(
-                os.path.splitext(os.path.join(tasks_file))[0]))
-        finally:
-            sys.path.remove(os.path.dirname(tasks_file))
-
-    context_manager = ContextManager(ctx, fabric_env)
-    tasks_module = _import_tasks_module(tasks_file)
-    ctx.logger.info('running task: {0} from {1}'.format(task_name,
-                                                        tasks_file))
-    task = getattr(tasks_module, task_name)
-    with api.settings(**_fabric_env(ctx, context_manager, fabric_env)):
+    task = _get_task(ctx, tasks_file, task_name)
+    ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
+    with api.settings(**_fabric_env(ctx, fabric_env)):
         task(ctx)
 
 
-class ContextManager():
-    """context handler to easily retrieve context info
-    """
-    def __init__(self, ctx, fabric_env):
-        """initializes fabric env configuration and context logger
-        """
-        self.ctx = ctx
+def _get_task(_ctx, tasks_file, task_name):
+    tasks_file = _ctx.download_resource(tasks_file)
+    _ctx.logger.debug('importing tasks file...')
+    sys.path.append(os.path.dirname(tasks_file))
+    try:
+        module = importlib.import_module(os.path.basename(
+            os.path.splitext(os.path.join(tasks_file))[0]))
+    except ImportError, e:
+        raise NonRecoverableError(
+            'Could not import {0} ({1})'.format(tasks_file, e.message))
+    finally:
+        sys.path.remove(os.path.dirname(tasks_file))
+
+    try:
+        task = getattr(module, task_name)
+    except AttributeError, e:
+        raise NonRecoverableError(
+            'Could not get task {0} from {1} ({2})'
+            .format(task_name, tasks_file, e.message))
+    return task
+
+
+class CredentialsHandler():
+    """handler to easily retrieve credentials info"""
+    def __init__(self, _ctx, fabric_env):
+        self.ctx = _ctx
         self.fabric_env = fabric_env
-        self.logger = ctx.logger
+        self.logger = self.ctx.logger
 
     @property
     def user(self):
@@ -131,27 +136,27 @@ class ContextManager():
         return host_string
 
 
-def _fabric_env(ctx, context_manager, fabric_env):
-    """configures fabric environment variables
+def _fabric_env(_ctx, fabric_env):
+    """prepares fabric environment variables configuration
 
-    :param ctx: CloudifyContext
-    :param instance context_manager: ContextManager instance
-    :param dict fabric_env: configuration for running the commands
+    :param _ctx: CloudifyContext instance
+    :param fabric_env: fabric configuration
     """
-    ctx.logger.info('configuring fabric environment...')
-    call_env = {}
-    call_env.update(FABRIC_ENV_DEFAULTS)
-    call_env.update(fabric_env)
-    call_env.update({
-        'host_string': context_manager.host_string,
-        'user': context_manager.user,
-        'key_filename': context_manager.key_filename,
-        'password': context_manager.password
+    _ctx.logger.info('preparing fabric environment...')
+    credentials = CredentialsHandler(_ctx, fabric_env)
+    final_env = {}
+    final_env.update(FABRIC_ENV_DEFAULTS)
+    final_env.update(fabric_env)
+    final_env.update({
+        'host_string': credentials.host_string,
+        'user': credentials.user,
+        'key_filename': credentials.key_filename,
+        'password': credentials.password
     })
     # validations
-    if not (call_env.get('password') or call_env.get('key_filename')):
+    if not (final_env.get('password') or final_env.get('key_filename')):
         raise NonRecoverableError(
             'access credentials not supplied '
             '(you must supply at least one of key_filename or password)')
-    ctx.logger.info('environment configured successfully')
-    return call_env
+    _ctx.logger.info('environment prepared successfully')
+    return final_env
