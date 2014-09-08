@@ -19,6 +19,6 @@ def exec_globals(tasks_file):
     del copied_globals['exec_globals']
     copied_globals['__doc__'] = 'empty globals for exec'
     copied_globals['__file__'] = tasks_file
-    copied_globals['__name__'] = '__main__'
+    copied_globals['__name__'] = 'fabric_tasks'
     copied_globals['__package__'] = None
     return copied_globals
