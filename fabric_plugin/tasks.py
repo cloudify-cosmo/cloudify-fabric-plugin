@@ -54,19 +54,17 @@ def run_task(tasks_file, task_name, fabric_env, **kwargs):
         ctx.logger.debug('importing tasks file...')
         sys.path.append(os.path.dirname(tasks_file))
         try:
-            module = importlib.import_module(
-                os.path.basename(os.path.splitext(
-            os.path.join(tasks_file))[0]))
+            return importlib.import_module(os.path.basename(
+                os.path.splitext(os.path.join(tasks_file))[0]))
         finally:
             sys.path.remove(os.path.dirname(tasks_file))
 
     context_manager = ContextManager(ctx, fabric_env)
-    _configure_fabric_env(ctx, context_manager, fabric_env)
     tasks_module = _import_tasks_module(tasks_file)
-    with api.settings(host_string=ctx.host_ip):
-        ctx.logger.info('running task: {0} from {1}'.format(task_name,
-                                                            tasks_file))
-        task = getattr(tasks_module, task_name)
+    ctx.logger.info('running task: {0} from {1}'.format(task_name,
+                                                        tasks_file))
+    task = getattr(tasks_module, task_name)
+    with api.settings(**_fabric_env(ctx, context_manager, fabric_env)):
         task(ctx)
 
 
@@ -80,7 +78,8 @@ class ContextManager():
         self.fabric_env = fabric_env
         self.logger = ctx.logger
 
-    def get_ssh_user(self):
+    @property
+    def user(self):
         """returns the ssh user to use when connecting to the remote host"""
         self.logger.debug('retrieving ssh user...')
         if 'user' not in self.fabric_env:
@@ -94,7 +93,8 @@ class ContextManager():
         self.logger.debug('ssh user is: {0}'.format(user))
         return user
 
-    def get_ssh_key(self):
+    @property
+    def key_filename(self):
         """returns the ssh key to use when connecting to the remote host"""
         self.logger.debug('retrieving ssh key...')
         if 'key_filename' not in self.fabric_env:
@@ -108,7 +108,8 @@ class ContextManager():
         self.logger.debug('ssh key path is: {0}'.format(key))
         return key
 
-    def get_ssh_password(self):
+    @property
+    def password(self):
         """returns the ssh pwd to use when connecting to the remote host"""
         self.logger.debug('retrieving ssh password...')
         if 'password' in self.fabric_env:
@@ -119,34 +120,38 @@ class ContextManager():
         self.logger.debug('ssh pwd is: {0}'.format(pwd))
         return pwd
 
+    @property
+    def host_string(self):
+        self.logger.debug('retrieving host string...')
+        if 'host_string' in self.fabric_env:
+            host_string = self.fabric_env['host_string']
+        else:
+            host_string = self.ctx.host_ip
+        self.logger.debug('ssh host_string is: {0}'.format(host_string))
+        return host_string
 
-def _configure_fabric_env(ctx, context_manager, fabric_env):
+
+def _fabric_env(ctx, context_manager, fabric_env):
     """configures fabric environment variables
-
-    Most of the configuration is overridable, like ssh_user, ssh_key_path,
-    ssh_password..
-    Some are defined by default like linewise, and keepalive.
 
     :param ctx: CloudifyContext
     :param instance context_manager: ContextManager instance
-    :param dict fabric_config: configuration for running the commands
+    :param dict fabric_env: configuration for running the commands
     """
     ctx.logger.info('configuring fabric environment...')
-
-    env_credentials = {
-        'user': context_manager.get_ssh_user(),
-        'key_filename': context_manager.get_ssh_key(),
-        'password': context.get_ssh_password()
-    }
-
-    api.env.update(FABRIC_ENV_DEFAULTS)
-    api.env.update(fabric_env)
-    api.env.update(env_credentials)
-
+    call_env = {}
+    call_env.update(FABRIC_ENV_DEFAULTS)
+    call_env.update(fabric_env)
+    call_env.update({
+        'host_string': context_manager.host_string,
+        'user': context_manager.user,
+        'key_filename': context_manager.key_filename,
+        'password': context_manager.password
+    })
     # validations
-    if not (env.password or env.key_filename):
+    if not (call_env.get('password') or call_env.get('key_filename')):
         raise NonRecoverableError(
-            'access creds not supplied'
+            'access credentials not supplied '
             '(you must supply at least one of key_filename or password)')
-
     ctx.logger.info('environment configured successfully')
+    return call_env
