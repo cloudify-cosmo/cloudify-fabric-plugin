@@ -14,16 +14,14 @@
 #    * limitations under the License.
 
 
-import sys
-import os
-import importlib
-
+from six import exec_
 from fabric import api as fabric_api
 
 from cloudify.decorators import operation
 from cloudify.exceptions import NonRecoverableError
 from cloudify import ctx
 
+from fabric_plugin import exec_env
 
 FABRIC_ENV_DEFAULTS = {
     'warn_only': True,
@@ -68,24 +66,24 @@ def run_commands(commands, fabric_env, **kwargs):
 
 
 def _get_task(_ctx, tasks_file, task_name):
-    tasks_file = _ctx.download_resource(tasks_file)
-    _ctx.logger.debug('importing tasks file...')
-    sys.path.append(os.path.dirname(tasks_file))
+    _ctx.logger.debug('getting tasks file...')
+    tasks_code = _ctx.get_resource(tasks_file)
+    exec_globs = exec_env.exec_globals(tasks_file)
     try:
-        module = importlib.import_module(os.path.basename(
-            os.path.splitext(os.path.join(tasks_file))[0]))
-    except ImportError, e:
+        exec_(tasks_code, _globs_=exec_globs)
+    except Exception, e:
         raise NonRecoverableError(
-            'Could not import {0} ({1})'.format(tasks_file, e.message))
-    finally:
-        sys.path.remove(os.path.dirname(tasks_file))
-
-    try:
-        task = getattr(module, task_name)
-    except AttributeError, e:
+            "Could not load '{0}' ({1}: {2})".format(tasks_file,
+                                                     type(e).__name__, e))
+    task = exec_globs.get(task_name)
+    if not task:
         raise NonRecoverableError(
-            'Could not get task {0} from {1} ({2})'
-            .format(task_name, tasks_file, e.message))
+            "Could not find task '{0}' in '{1}'"
+            .format(task_name, tasks_file))
+    if not callable(task):
+        raise NonRecoverableError(
+            "'{0}' in '{1}' is not callable"
+            .format(task_name, tasks_file))
     return task
 
 
