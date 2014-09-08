@@ -44,4 +44,3 @@ class FabricPluginTest(unittest.TestCase):
 
     def test(self):
         self._execute('install')
-
