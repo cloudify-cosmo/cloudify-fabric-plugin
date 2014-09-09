@@ -21,26 +21,27 @@ from cloudify.workflows import local
 
 class FabricPluginTest(unittest.TestCase):
 
-    def setUp(self):
+    def _blueprint(self):
+        return os.path.join(os.path.dirname(__file__),
+                            'resources', 'blueprint.yaml')
+
+    def _execute(self, workflow, task_name=None, commands=None):
         key_filename = os.path.expanduser('~/.vagrant.d/insecure_private_key')
         inputs = {
             'fabric_env': {
                 'host_string': '11.0.0.7',
                 'user': 'vagrant',
                 'key_filename': key_filename
-            }
+            },
+            'task_name': task_name or 'stub',
+            'commands': commands or []
         }
         self.env = local.Environment(self._blueprint(),
                                      name=self._testMethodName,
                                      inputs=inputs)
 
-    def _blueprint(self):
-        return os.path.join(os.path.dirname(__file__),
-                            'resources', 'blueprint.yaml')
-
-    def _execute(self, workflow):
         self.env.execute(workflow,
                          task_retries=0)
 
     def test(self):
-        self._execute('install')
+        self._execute('install', task_name='task', commands=['ls /'])

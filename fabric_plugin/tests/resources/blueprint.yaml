@@ -7,10 +7,9 @@ plugins:
         derived_from: cloudify.plugins.manager_plugin
 
 inputs:
-    fabric_env:
-        description: >
-            fabric environment configuration.
-
+    fabric_env: {}
+    task_name: {}
+    commands: {}
 
 node_templates:
     node:
@@ -20,13 +19,11 @@ node_templates:
                 - create:
                     mapping: fabric.fabric_plugin.tasks.run_commands
                     properties:
-                        commands:
-                            - echo this is great
-                            - ls /
+                        commands: { get_input: commands }
                         fabric_env: { get_input: fabric_env }
                 - start:
                     mapping: fabric.fabric_plugin.tasks.run_task
                     properties:
-                        task_name: task
                         tasks_file: fabric_tasks.py
+                        task_name: { get_input: task_name }
                         fabric_env: { get_input: fabric_env }
