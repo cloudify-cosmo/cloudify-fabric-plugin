@@ -17,15 +17,25 @@ import os
 import unittest
 
 from cloudify.workflows import local
+from cloudify.workflows import ctx as workflow_ctx
+from cloudify.decorators import workflow
 
 
 class FabricPluginTest(unittest.TestCase):
 
-    def _blueprint(self):
-        return os.path.join(os.path.dirname(__file__),
-                            'resources', 'blueprint.yaml')
+    def test_run_task(self):
+        self._execute('test.run_task', task_name='task')
 
-    def _execute(self, workflow, task_name=None, commands=None):
+    def test_run_commands(self):
+        self._execute('test.run_commands', commands=['ls /'])
+
+    def _blueprint(self):
+        return
+
+    def _execute(self,
+                 operation,
+                 task_name=None,
+                 commands=None):
         key_filename = os.path.expanduser('~/.vagrant.d/insecure_private_key')
         inputs = {
             'fabric_env': {
@@ -36,12 +46,18 @@ class FabricPluginTest(unittest.TestCase):
             'task_name': task_name or 'stub',
             'commands': commands or []
         }
-        self.env = local.Environment(self._blueprint(),
+        blueprint_path = os.path.join(os.path.dirname(__file__),
+                                      'blueprint', 'blueprint.yaml')
+        self.env = local.Environment(blueprint_path,
                                      name=self._testMethodName,
                                      inputs=inputs)
-
-        self.env.execute(workflow,
+        self.env.execute('execute_operation',
+                         parameters={'operation': operation},
                          task_retries=0)
 
-    def test(self):
-        self._execute('install', task_name='task', commands=['ls /'])
+
+@workflow
+def execute_operation(operation, **kwargs):
+    node = next(workflow_ctx.nodes)
+    instance = next(node.instances)
+    instance.execute_operation(operation)

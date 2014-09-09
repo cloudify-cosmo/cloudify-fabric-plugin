@@ -1,29 +1,34 @@
-imports:
-    #- http://www.getcloudify.org/spec/cloudify/3.1/types.yaml
-    - file:///home/dan/dev/cloudify/cloudify-manager/resources/rest-service/cloudify/types/types.yaml
-
 plugins:
     fabric:
         derived_from: cloudify.plugins.manager_plugin
 
 inputs:
     fabric_env: {}
-    task_name: {}
-    commands: {}
+    task_name:  {}
+    commands:   {}
+
+node_types:
+    test_type:  {}
 
 node_templates:
     node:
-        type: cloudify.types.base
+        type: test_type
         interfaces:
-            cloudify.interfaces.lifecycle:
-                - create:
+            test:
+                - run_commands:
                     mapping: fabric.fabric_plugin.tasks.run_commands
                     properties:
-                        commands: { get_input: commands }
+                        commands:   { get_input: commands }
                         fabric_env: { get_input: fabric_env }
-                - start:
+                - run_task:
                     mapping: fabric.fabric_plugin.tasks.run_task
                     properties:
                         tasks_file: fabric_tasks.py
-                        task_name: { get_input: task_name }
+                        task_name:  { get_input: task_name }
                         fabric_env: { get_input: fabric_env }
+
+workflows:
+    execute_operation:
+        mapping: fabric.fabric_plugin.tests.tests.execute_operation
+        parameters:
+            operation: {}
