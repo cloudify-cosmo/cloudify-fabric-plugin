@@ -19,7 +19,7 @@ from setuptools import setup
 
 setup(
     name='cloudify-fabric-plugin',
-    version='1.0',
+    version='1.1a3',
     author='nir0s',
     author_email='nirc@gigaspaces.com',
     packages=['fabric_plugin'],
