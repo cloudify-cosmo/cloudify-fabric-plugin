@@ -29,12 +29,10 @@ class FabricPluginTest(unittest.TestCase):
     def test_run_commands(self):
         self._execute('test.run_commands', commands=['ls /'])
 
-    def _blueprint(self):
-        return
-
     def _execute(self,
                  operation,
                  task_name=None,
+                 tasks_file=None,
                  commands=None):
         key_filename = os.path.expanduser('~/.vagrant.d/insecure_private_key')
         inputs = {
@@ -44,7 +42,8 @@ class FabricPluginTest(unittest.TestCase):
                 'key_filename': key_filename
             },
             'task_name': task_name or 'stub',
-            'commands': commands or []
+            'commands': commands or [],
+            'tasks_file': tasks_file or 'fabric_tasks.py'
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')

@@ -1,34 +1,33 @@
-plugins:
-    fabric:
-        derived_from: cloudify.plugins.manager_plugin
-
 inputs:
     fabric_env: {}
-    task_name:  {}
     commands:   {}
-
-node_types:
-    test_type:  {}
+    task_name:  {}
+    tasks_file: {}
 
 node_templates:
-    node:
-        type: test_type
+    test:
+        type: test
         interfaces:
             test:
                 - run_commands:
                     mapping: fabric.fabric_plugin.tasks.run_commands
                     properties:
-                        commands:   { get_input: commands }
+                        commands:   { get_input: commands   }
                         fabric_env: { get_input: fabric_env }
                 - run_task:
                     mapping: fabric.fabric_plugin.tasks.run_task
                     properties:
-                        tasks_file: fabric_tasks.py
-                        task_name:  { get_input: task_name }
+                        tasks_file: { get_input: tasks_file }
+                        task_name:  { get_input: task_name  }
                         fabric_env: { get_input: fabric_env }
 
 workflows:
     execute_operation:
         mapping: fabric.fabric_plugin.tests.tests.execute_operation
-        parameters:
-            operation: {}
+        parameters: { operation: {} }
+
+plugins:
+    fabric:
+        derived_from: cloudify.plugins.manager_plugin
+
+node_types: { test: {} }
