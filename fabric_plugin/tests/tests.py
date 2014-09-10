@@ -67,6 +67,7 @@ class FabricPluginTest(unittest.TestCase):
         instance = self.env.storage.get_node_instances()[0]
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
+        self.assertIs(False, self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_run_commands(self):
@@ -74,6 +75,7 @@ class FabricPluginTest(unittest.TestCase):
         self._execute('test.run_commands', commands=commands)
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
+        self.assertIs(True, self.mock.settings_merged['warn_only'])
         self.assertListEqual(self.mock.commands, commands)
 
     def test_missing_user(self):
@@ -180,6 +182,19 @@ class FabricPluginTest(unittest.TestCase):
                       fabric_env=fabric_env)
         self.assertEqual('explicit_user',
                          self.mock.settings_merged['user'])
+
+    def test_override_warn_only(self):
+        fabric_env = self.default_fabric_env.copy()
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertIs(False, self.mock.settings_merged['warn_only'])
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['warn_only'] = True
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertIs(True, self.mock.settings_merged['warn_only'])
 
     class MockFabricApi(object):
 

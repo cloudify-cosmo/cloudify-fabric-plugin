@@ -24,7 +24,6 @@ from cloudify import ctx
 from fabric_plugin import exec_env
 
 FABRIC_ENV_DEFAULTS = {
-    'warn_only': False,
     'connection_attempts': 5,
     'timeout': 10,
     'forward_agent': True,
@@ -49,7 +48,7 @@ def run_task(tasks_file, task_name, fabric_env, **kwargs):
     """
     task = _get_task(ctx, tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
-    with fabric_api.settings(**_fabric_env(ctx, fabric_env)):
+    with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=False)):
         task(ctx)
 
 
@@ -60,7 +59,7 @@ def run_commands(commands, fabric_env, **kwargs):
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
-    with fabric_api.settings(**_fabric_env(ctx, fabric_env)):
+    with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=True)):
         for command in commands:
             ctx.logger.info('running command: {0}'.format(command))
             fabric_api.run(command)
@@ -148,13 +147,14 @@ class CredentialsHandler():
         return host_string
 
 
-def _fabric_env(_ctx, fabric_env):
+def _fabric_env(_ctx, fabric_env, warn_only):
     """prepares fabric environment variables configuration
 
     :param _ctx: CloudifyContext instance
     :param fabric_env: fabric configuration
     """
     _ctx.logger.info('preparing fabric environment...')
+    warn_only = fabric_env.get('warn_only', warn_only)
     credentials = CredentialsHandler(_ctx, fabric_env)
     final_env = {}
     final_env.update(FABRIC_ENV_DEFAULTS)
@@ -163,7 +163,8 @@ def _fabric_env(_ctx, fabric_env):
         'host_string': credentials.host_string,
         'user': credentials.user,
         'key_filename': credentials.key_filename,
-        'password': credentials.password
+        'password': credentials.password,
+        'warn_only': warn_only
     })
     # validations
     if not (final_env.get('password') or final_env.get('key_filename')):
