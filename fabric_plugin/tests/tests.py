@@ -15,32 +15,220 @@
 
 import os
 import unittest
+import contextlib
+import errno
 
+from cloudify.exceptions import NonRecoverableError
 from cloudify.workflows import local
 from cloudify.workflows import ctx as workflow_ctx
 from cloudify.decorators import workflow
+from cloudify.endpoint import LocalEndpoint
+
+from fabric_plugin import tasks
 
 
 class FabricPluginTest(unittest.TestCase):
 
+    def test_missing_tasks_file(self):
+        try:
+            self._execute('test.run_task', tasks_file='missing.py')
+            self.fail()
+        except IOError, e:
+            self.assertEqual(e.errno, errno.ENOENT)
+
+    def test_bad_tasks_file(self):
+        try:
+            self._execute('test.run_task', tasks_file='corrupted_file.py')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn("Could not load 'corrupted_file.py'", e.message)
+            self.assertIn("ImportError: No module named module", e.message)
+
+    def test_missing_task(self):
+        try:
+            self._execute('test.run_task', task_name='missing')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn("Could not find task", e.message)
+            self.assertIn('missing', e.message)
+            self.assertIn('fabric_tasks.py', e.message)
+
+    def test_non_callable_task(self):
+        try:
+            self._execute('test.run_task', task_name='non_callable')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn('not callable', e.message)
+            self.assertIn('non_callable', e.message)
+            self.assertIn('fabric_tasks.py', e.message)
+
     def test_run_task(self):
         self._execute('test.run_task', task_name='task')
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertDictContainsSubset(self.default_fabric_env,
+                                      self.mock.settings_merged)
+        self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_run_commands(self):
-        self._execute('test.run_commands', commands=['ls /'])
+        commands = ['command1', 'command2']
+        self._execute('test.run_commands', commands=commands)
+        self.assertDictContainsSubset(self.default_fabric_env,
+                                      self.mock.settings_merged)
+        self.assertListEqual(self.mock.commands, commands)
+
+    def test_missing_user(self):
+        try:
+            self._execute('test.run_task',
+                          task_name='task',
+                          fabric_env={'password': 'test'})
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertEqual('ssh user definition missing', e.message)
+
+    def test_missing_key_or_password(self):
+        try:
+            self._execute('test.run_task',
+                          task_name='task',
+                          fabric_env={'user': 'test'})
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn('key_filename or password', e.message)
+
+    def test_fabric_env_default_override(self):
+        # first sanity for no override
+        self._execute('test.run_task',
+                      task_name='task')
+        self.assertEqual(self.mock.settings_merged['timeout'],
+                         tasks.FABRIC_ENV_DEFAULTS['timeout'])
+        # now override
+        invocation_fabric_env = self.default_fabric_env.copy()
+        invocation_fabric_env['timeout'] = 1000000
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=invocation_fabric_env)
+        self.assertEqual(self.mock.settings_merged['timeout'], 1000000)
+
+    def test_implicit_host_string(self):
+        self._execute('test.run_task',
+                      task_name='test_implicit_host_string')
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(instance.runtime_properties['expected_host_string'],
+                         self.mock.settings_merged['host_string'])
+
+    def test_explicit_host_string(self):
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['host_string'] = 'explicit_host_string'
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertEqual('explicit_host_string',
+                         self.mock.settings_merged['host_string'])
+
+    def test_explicit_password(self):
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['password'] = 'explicit_password'
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertEqual('explicit_password',
+                         self.mock.settings_merged['password'])
+
+    def test_implicit_key_filename(self):
+        fabric_env = self.default_fabric_env.copy()
+        del fabric_env['key_filename']
+        bootstrap_context = {
+            'cloudify_agent': {
+                'agent_key_path': 'implicit_key_filename'
+            }
+        }
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env,
+                      bootstrap_context=bootstrap_context)
+        self.assertEqual('implicit_key_filename',
+                         self.mock.settings_merged['key_filename'])
+
+    def test_explicit_key_filename(self):
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['key_filename'] = 'explicit_key_filename'
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertEqual('explicit_key_filename',
+                         self.mock.settings_merged['key_filename'])
+
+    def test_implicit_user(self):
+        fabric_env = self.default_fabric_env.copy()
+        del fabric_env['user']
+        bootstrap_context = {
+            'cloudify_agent': {
+                'user': 'implicit_user'
+            }
+        }
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env,
+                      bootstrap_context=bootstrap_context)
+        self.assertEqual('implicit_user',
+                         self.mock.settings_merged['user'])
+
+    def test_explicit_user(self):
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['user'] = 'explicit_user'
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertEqual('explicit_user',
+                         self.mock.settings_merged['user'])
+
+    class MockFabricApi(object):
+
+        def __init__(self):
+            self.commands = []
+            self.settings_merged = {}
+
+        @contextlib.contextmanager
+        def settings(self, **kwargs):
+            self.settings_merged.update(kwargs)
+            yield
+
+        def run(self, command):
+            self.commands.append(command)
+
+    def setUp(self):
+        self.default_fabric_env = {
+            'user': 'test',
+            'key_filename': 'test'
+        }
+        self.original_fabric_api = tasks.fabric_api
+        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
+        self.mock = self.MockFabricApi()
+        tasks.fabric_api = self.mock
+        self.bootstrap_context = {}
+        outer = self
+
+        def mock_get_bootstrap_context(self):
+            return outer.bootstrap_context
+        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
+        self.addCleanup(self.cleanup)
+
+    def cleanup(self):
+        tasks.fabric_api = self.original_fabric_api
+        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
 
     def _execute(self,
                  operation,
+                 fabric_env=None,
                  task_name=None,
                  tasks_file=None,
-                 commands=None):
-        key_filename = os.path.expanduser('~/.vagrant.d/insecure_private_key')
+                 commands=None,
+                 bootstrap_context=None):
+
+        bootstrap_context = bootstrap_context or {}
+        self.bootstrap_context.update(bootstrap_context)
+
         inputs = {
-            'fabric_env': {
-                'host_string': '11.0.0.7',
-                'user': 'vagrant',
-                'key_filename': key_filename
-            },
+            'fabric_env': fabric_env or self.default_fabric_env,
             'task_name': task_name or 'stub',
             'commands': commands or [],
             'tasks_file': tasks_file or 'fabric_tasks.py'
