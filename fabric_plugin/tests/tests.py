@@ -196,6 +196,26 @@ class FabricPluginTest(unittest.TestCase):
                       fabric_env=fabric_env)
         self.assertIs(True, self.mock.settings_merged['warn_only'])
 
+    def test_failed_command(self):
+        commands = ['fail']
+        try:
+            self._execute('test.run_commands', commands=commands)
+            self.fail()
+        except tasks.FabricCommandError, e:
+            self.assertEqual('mock_stdout', e.output)
+            self.assertEqual('mock_stderr', e.error)
+            self.assertEqual('mock_command', e.command)
+            self.assertEqual(1, e.code)
+
+    class MockCommandResult(object):
+
+        def __init__(self, failed):
+            self.failed = failed
+            self.stdout = 'mock_stdout'
+            self.stderr = 'mock_stderr'
+            self.command = 'mock_command'
+            self.return_code = 1
+
     class MockFabricApi(object):
 
         def __init__(self):
@@ -209,6 +229,7 @@ class FabricPluginTest(unittest.TestCase):
 
         def run(self, command):
             self.commands.append(command)
+            return FabricPluginTest.MockCommandResult(command == 'fail')
 
     def setUp(self):
         self.default_fabric_env = {

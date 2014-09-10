@@ -17,9 +17,9 @@
 from six import exec_
 from fabric import api as fabric_api
 
-from cloudify.decorators import operation
-from cloudify.exceptions import NonRecoverableError
 from cloudify import ctx
+from cloudify import exceptions
+from cloudify.decorators import operation
 
 from fabric_plugin import exec_env
 
@@ -62,7 +62,9 @@ def run_commands(commands, fabric_env, **kwargs):
     with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=True)):
         for command in commands:
             ctx.logger.info('running command: {0}'.format(command))
-            fabric_api.run(command)
+            result = fabric_api.run(command)
+            if result.failed:
+                raise FabricCommandError(result)
 
 
 def _get_task(_ctx, tasks_file, task_name):
@@ -72,16 +74,16 @@ def _get_task(_ctx, tasks_file, task_name):
     try:
         exec_(tasks_code, _globs_=exec_globs)
     except Exception, e:
-        raise NonRecoverableError(
+        raise exceptions.NonRecoverableError(
             "Could not load '{0}' ({1}: {2})".format(tasks_file,
                                                      type(e).__name__, e))
     task = exec_globs.get(task_name)
     if not task:
-        raise NonRecoverableError(
+        raise exceptions.NonRecoverableError(
             "Could not find task '{0}' in '{1}'"
             .format(task_name, tasks_file))
     if not callable(task):
-        raise NonRecoverableError(
+        raise exceptions.NonRecoverableError(
             "'{0}' in '{1}' is not callable"
             .format(task_name, tasks_file))
     return task
@@ -103,7 +105,8 @@ class CredentialsHandler():
                 user = self.ctx.bootstrap_context.cloudify_agent.user
             else:
                 self.logger.error('no user configured for ssh connections')
-                raise NonRecoverableError('ssh user definition missing')
+                raise exceptions.NonRecoverableError(
+                    'ssh user definition missing')
         else:
             user = self.fabric_env['user']
         self.logger.debug('ssh user is: {0}'.format(user))
@@ -154,7 +157,6 @@ def _fabric_env(_ctx, fabric_env, warn_only):
     :param fabric_env: fabric configuration
     """
     _ctx.logger.info('preparing fabric environment...')
-    warn_only = fabric_env.get('warn_only', warn_only)
     credentials = CredentialsHandler(_ctx, fabric_env)
     final_env = {}
     final_env.update(FABRIC_ENV_DEFAULTS)
@@ -164,12 +166,27 @@ def _fabric_env(_ctx, fabric_env, warn_only):
         'user': credentials.user,
         'key_filename': credentials.key_filename,
         'password': credentials.password,
-        'warn_only': warn_only
+        'warn_only': fabric_env.get('warn_only', warn_only),
+        'abort_exception': FabricTaskError
     })
     # validations
     if not (final_env.get('password') or final_env.get('key_filename')):
-        raise NonRecoverableError(
+        raise exceptions.NonRecoverableError(
             'access credentials not supplied '
             '(you must supply at least one of key_filename or password)')
     _ctx.logger.info('environment prepared successfully')
     return final_env
+
+
+class FabricTaskError(Exception):
+    pass
+
+
+class FabricCommandError(exceptions.CommandExecutionException):
+
+    def __init__(self, command_result):
+        out = command_result.stdout
+        err = command_result.stderr
+        command = command_result.command
+        code = command_result.return_code
+        super(FabricCommandError, self).__init__(command, err, out, code)
