@@ -35,7 +35,7 @@ FABRIC_ENV_DEFAULTS = {
     'skip_bad_hosts': False,
     'status': False,
     'disable_known_hosts': False,
-    'combine_stderr': False,
+    'combine_stderr': True,
 }
 
 
