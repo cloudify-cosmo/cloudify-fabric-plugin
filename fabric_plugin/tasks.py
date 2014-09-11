@@ -39,7 +39,8 @@ FABRIC_ENV_DEFAULTS = {
 
 
 @operation
-def run_task(tasks_file, task_name, fabric_env, **kwargs):
+def run_task(tasks_file, task_name, fabric_env,
+             task_properties=None, **kwargs):
     """runs the specified fabric task loaded from 'tasks_file'
 
     :param tasks_file: the tasks file
@@ -49,7 +50,8 @@ def run_task(tasks_file, task_name, fabric_env, **kwargs):
     task = _get_task(ctx, tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
     with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=False)):
-        task(ctx)
+        task_properties = task_properties or {}
+        task(ctx, **task_properties)
 
 
 @operation

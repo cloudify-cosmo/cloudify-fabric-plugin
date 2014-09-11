@@ -1,8 +1,9 @@
 inputs:
-    fabric_env: {}
-    commands:   {}
-    task_name:  {}
-    tasks_file: {}
+    fabric_env:      {}
+    commands:        {}
+    task_name:       {}
+    tasks_file:      {}
+    task_properties: {}
 
 node_templates:
     test:
@@ -17,9 +18,10 @@ node_templates:
                 - run_task:
                     mapping: fabric.fabric_plugin.tasks.run_task
                     properties:
-                        tasks_file: { get_input: tasks_file }
-                        task_name:  { get_input: task_name  }
-                        fabric_env: { get_input: fabric_env }
+                        tasks_file:      { get_input: tasks_file }
+                        task_name:       { get_input: task_name  }
+                        task_properties: { get_input: task_properties }
+                        fabric_env:      { get_input: fabric_env }
 
 workflows:
     execute_operation:

@@ -70,6 +70,12 @@ class FabricPluginTest(unittest.TestCase):
         self.assertIs(False, self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
+    def test_task_properties(self):
+        self._execute('test.run_task', task_name='test_task_properties',
+                      task_properties={'arg': 'value'})
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(instance.runtime_properties['arg'], 'value1')
+
     def test_run_commands(self):
         commands = ['command1', 'command2']
         self._execute('test.run_commands', commands=commands)
@@ -257,6 +263,7 @@ class FabricPluginTest(unittest.TestCase):
                  fabric_env=None,
                  task_name=None,
                  tasks_file=None,
+                 task_properties=None,
                  commands=None,
                  bootstrap_context=None):
 
@@ -267,7 +274,8 @@ class FabricPluginTest(unittest.TestCase):
             'fabric_env': fabric_env or self.default_fabric_env,
             'task_name': task_name or 'stub',
             'commands': commands or [],
-            'tasks_file': tasks_file or 'fabric_tasks.py'
+            'tasks_file': tasks_file or 'fabric_tasks.py',
+            'task_properties': task_properties or {}
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
