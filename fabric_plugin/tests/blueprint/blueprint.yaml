@@ -5,10 +5,13 @@ inputs:
     tasks_file:      {}
     task_properties: {}
     task_mapping:    {}
+    ip:              {}
 
 node_templates:
     test:
-        type: test
+        type: cloudify.types.host
+        properties:
+            ip: { get_input: ip }
         interfaces:
             test:
                 - run_commands:
@@ -40,4 +43,6 @@ plugins:
     fabric:
         derived_from: cloudify.plugins.manager_plugin
 
-node_types: { test: {} }
+node_types:
+    cloudify.types.host:
+        properties: { ip: {} }

@@ -122,7 +122,8 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task',
                           task_name='task',
-                          fabric_env={'password': 'test'})
+                          fabric_env={'password': 'test',
+                                      'host_string': 'test'})
             self.fail()
         except NonRecoverableError, e:
             self.assertEqual('ssh user definition missing', e.message)
@@ -131,7 +132,8 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task',
                           task_name='task',
-                          fabric_env={'user': 'test'})
+                          fabric_env={'user': 'test',
+                                      'host_string': 'test'})
             self.fail()
         except NonRecoverableError, e:
             self.assertIn('key_filename or password', e.message)
@@ -151,8 +153,12 @@ class FabricPluginTest(unittest.TestCase):
         self.assertEqual(self.mock.settings_merged['timeout'], 1000000)
 
     def test_implicit_host_string(self):
+        fabric_env = self.default_fabric_env.copy()
+        del fabric_env['host_string']
         self._execute('test.run_task',
-                      task_name='test_implicit_host_string')
+                      task_name='test_implicit_host_string',
+                      ip='1.1.1.1',
+                      fabric_env=fabric_env)
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(instance.runtime_properties['expected_host_string'],
                          self.mock.settings_merged['host_string'])
@@ -273,6 +279,7 @@ class FabricPluginTest(unittest.TestCase):
 
     def setUp(self):
         self.default_fabric_env = {
+            'host_string': 'test',
             'user': 'test',
             'key_filename': 'test'
         }
@@ -300,7 +307,8 @@ class FabricPluginTest(unittest.TestCase):
                  task_properties=None,
                  task_mapping=None,
                  commands=None,
-                 bootstrap_context=None):
+                 bootstrap_context=None,
+                 ip=None):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -311,13 +319,14 @@ class FabricPluginTest(unittest.TestCase):
             'commands': commands or [],
             'tasks_file': tasks_file or 'fabric_tasks.py',
             'task_properties': task_properties or {},
-            'task_mapping': task_mapping or ''
+            'task_mapping': task_mapping or '',
+            'ip': ip or '',
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
-        self.env = local.Environment(blueprint_path,
-                                     name=self._testMethodName,
-                                     inputs=inputs)
+        self.env = local.init_env(blueprint_path,
+                                  name=self._testMethodName,
+                                  inputs=inputs)
         self.env.execute('execute_operation',
                          parameters={'operation': operation},
                          task_retries=0)
