@@ -56,17 +56,17 @@ def run_task(tasks_file, task_name, fabric_env,
 
 
 @operation
-def run_module_task(mapping, fabric_env,
+def run_module_task(task_mapping, fabric_env,
                     task_properties=None, **kwargs):
     """runs the specified fabric module task specified by mapping'
 
-    :param mapping: the task module mapping
+    :param task_mapping: the task module mapping
     :param fabric_env: fabric configuration
     :param task_properties: optional properties to pass on to the task
                             as invocation kwargs
     """
-    task = _get_task_from_mapping(mapping)
-    ctx.logger.info('running task: {0}'.format(mapping))
+    task = _get_task_from_mapping(task_mapping)
+    ctx.logger.info('running task: {0}'.format(task_mapping))
     _run_task(task, task_properties, ctx, fabric_env)
 
 

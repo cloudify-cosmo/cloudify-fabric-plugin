@@ -79,8 +79,9 @@ class FabricPluginTest(unittest.TestCase):
 
     def test_non_callable_module_task(self):
         try:
-            self._execute('test.run_module_task',
-                          task_mapping='fabric_plugin.tests.tests.non_callable')
+            self._execute(
+                'test.run_module_task',
+                task_mapping='fabric_plugin.tests.tests.non_callable')
             self.fail()
         except NonRecoverableError, e:
             self.assertIn("'non_callable' in 'fabric_", e.message)

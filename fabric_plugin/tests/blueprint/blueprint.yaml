@@ -26,7 +26,7 @@ node_templates:
                 - run_module_task:
                     mapping: fabric.fabric_plugin.tasks.run_module_task
                     properties:
-                        mapping:         { get_input: task_mapping }
+                        task_mapping:    { get_input: task_mapping }
                         task_properties: { get_input: task_properties }
                         fabric_env:      { get_input: fabric_env }
 
