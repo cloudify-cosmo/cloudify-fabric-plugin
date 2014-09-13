@@ -13,6 +13,7 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
+import importlib
 
 from six import exec_
 from fabric import api as fabric_api
@@ -46,9 +47,30 @@ def run_task(tasks_file, task_name, fabric_env,
     :param tasks_file: the tasks file
     :param task_name: the task name to run in 'tasks_file'
     :param fabric_env: fabric configuration
+    :param task_properties: optional properties to pass on to the task
+                            as invocation kwargs
     """
     task = _get_task(ctx, tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
+    _run_task(task, task_properties, ctx, fabric_env)
+
+
+@operation
+def run_module_task(mapping, fabric_env,
+                    task_properties=None, **kwargs):
+    """runs the specified fabric module task specified by mapping'
+
+    :param mapping: the task module mapping
+    :param fabric_env: fabric configuration
+    :param task_properties: optional properties to pass on to the task
+                            as invocation kwargs
+    """
+    task = _get_task_from_mapping(mapping)
+    ctx.logger.info('running task: {0}'.format(mapping))
+    _run_task(task, task_properties, ctx, fabric_env)
+
+
+def _run_task(task, task_properties, ctx, fabric_env):
     with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=False)):
         task_properties = task_properties or {}
         task(ctx, **task_properties)
@@ -69,9 +91,38 @@ def run_commands(commands, fabric_env, **kwargs):
                 raise FabricCommandError(result)
 
 
+def _get_task_from_mapping(mapping):
+    split = mapping.split('.')
+    module_name = '.'.join(split[:-1])
+    task_name = split[-1]
+    try:
+        module = importlib.import_module(module_name)
+    except Exception, e:
+        raise exceptions.NonRecoverableError(
+            "Could not load '{0}' ({1}: {2})".format(module_name,
+                                                     type(e).__name__, e))
+    try:
+        task = getattr(module, task_name)
+    except Exception, e:
+        raise exceptions.NonRecoverableError(
+            "Could not find '{0}' in {1} ({2}: {3})"
+            .format(task_name, module_name,
+                    type(e).__name__, e))
+    if not callable(task):
+        raise exceptions.NonRecoverableError(
+            "'{0}' in '{1}' is not callable"
+            .format(task_name, module_name))
+    return task
+
+
 def _get_task(_ctx, tasks_file, task_name):
     _ctx.logger.debug('getting tasks file...')
-    tasks_code = _ctx.get_resource(tasks_file)
+    try:
+        tasks_code = _ctx.get_resource(tasks_file)
+    except Exception, e:
+        raise exceptions.NonRecoverableError(
+            "Could not get '{0}' ({1}: {2})".format(tasks_file,
+                                                    type(e).__name__, e))
     exec_globs = exec_env.exec_globals(tasks_file)
     try:
         exec_(tasks_code, _globs_=exec_globs)

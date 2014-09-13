@@ -4,6 +4,7 @@ inputs:
     task_name:       {}
     tasks_file:      {}
     task_properties: {}
+    task_mapping:    {}
 
 node_templates:
     test:
@@ -22,6 +23,13 @@ node_templates:
                         task_name:       { get_input: task_name  }
                         task_properties: { get_input: task_properties }
                         fabric_env:      { get_input: fabric_env }
+                - run_module_task:
+                    mapping: fabric.fabric_plugin.tasks.run_module_task
+                    properties:
+                        mapping:         { get_input: task_mapping }
+                        task_properties: { get_input: task_properties }
+                        fabric_env:      { get_input: fabric_env }
+
 
 workflows:
     execute_operation:

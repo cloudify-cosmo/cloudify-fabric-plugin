@@ -16,7 +16,6 @@
 import os
 import unittest
 import contextlib
-import errno
 
 from cloudify.exceptions import NonRecoverableError
 from cloudify.workflows import local
@@ -33,8 +32,8 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task', tasks_file='missing.py')
             self.fail()
-        except IOError, e:
-            self.assertEqual(e.errno, errno.ENOENT)
+        except NonRecoverableError, e:
+            self.assertIn("Could not get 'missing.py'", e.message)
 
     def test_bad_tasks_file(self):
         try:
@@ -62,8 +61,42 @@ class FabricPluginTest(unittest.TestCase):
             self.assertIn('non_callable', e.message)
             self.assertIn('fabric_tasks.py', e.message)
 
+    def test_missing_tasks_module(self):
+        try:
+            self._execute('test.run_module_task',
+                          task_mapping='module_that_does_not_exist.some_task')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn("Could not load 'module_that", e.message)
+
+    def test_missing_module_task_attribute(self):
+        try:
+            self._execute('test.run_module_task',
+                          task_mapping='fabric_plugin.tests.tests.whoami')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn("Could not find 'whoami' in fabric_", e.message)
+
+    def test_non_callable_module_task(self):
+        try:
+            self._execute('test.run_module_task',
+                          task_mapping='fabric_plugin.tests.tests.non_callable')
+            self.fail()
+        except NonRecoverableError, e:
+            self.assertIn("'non_callable' in 'fabric_", e.message)
+            self.assertIn('not callable', e.message)
+
     def test_run_task(self):
         self._execute('test.run_task', task_name='task')
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertDictContainsSubset(self.default_fabric_env,
+                                      self.mock.settings_merged)
+        self.assertIs(False, self.mock.settings_merged['warn_only'])
+        self.assertEqual(instance.runtime_properties['task_called'], 'called')
+
+    def test_run_module_task(self):
+        self._execute('test.run_module_task',
+                      task_mapping='fabric_plugin.tests.tests.module_task')
         instance = self.env.storage.get_node_instances()[0]
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
@@ -74,7 +107,7 @@ class FabricPluginTest(unittest.TestCase):
         self._execute('test.run_task', task_name='test_task_properties',
                       task_properties={'arg': 'value'})
         instance = self.env.storage.get_node_instances()[0]
-        self.assertEqual(instance.runtime_properties['arg'], 'value1')
+        self.assertEqual(instance.runtime_properties['arg'], 'value')
 
     def test_run_commands(self):
         commands = ['command1', 'command2']
@@ -264,6 +297,7 @@ class FabricPluginTest(unittest.TestCase):
                  task_name=None,
                  tasks_file=None,
                  task_properties=None,
+                 task_mapping=None,
                  commands=None,
                  bootstrap_context=None):
 
@@ -275,7 +309,8 @@ class FabricPluginTest(unittest.TestCase):
             'task_name': task_name or 'stub',
             'commands': commands or [],
             'tasks_file': tasks_file or 'fabric_tasks.py',
-            'task_properties': task_properties or {}
+            'task_properties': task_properties or {},
+            'task_mapping': task_mapping or ''
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
@@ -292,3 +327,9 @@ def execute_operation(operation, **kwargs):
     node = next(workflow_ctx.nodes)
     instance = next(node.instances)
     instance.execute_operation(operation)
+
+
+def module_task(ctx):
+    ctx.runtime_properties['task_called'] = 'called'
+
+non_callable = 1
