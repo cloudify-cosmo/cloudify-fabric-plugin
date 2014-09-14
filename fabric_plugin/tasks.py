@@ -97,13 +97,13 @@ def _get_task_from_mapping(mapping):
     task_name = split[-1]
     try:
         module = importlib.import_module(module_name)
-    except Exception, e:
+    except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not load '{0}' ({1}: {2})".format(module_name,
                                                      type(e).__name__, e))
     try:
         task = getattr(module, task_name)
-    except Exception, e:
+    except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not find '{0}' in {1} ({2}: {3})"
             .format(task_name, module_name,
@@ -119,14 +119,14 @@ def _get_task(_ctx, tasks_file, task_name):
     _ctx.logger.debug('getting tasks file...')
     try:
         tasks_code = _ctx.get_resource(tasks_file)
-    except Exception, e:
+    except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not get '{0}' ({1}: {2})".format(tasks_file,
                                                     type(e).__name__, e))
     exec_globs = exec_env.exec_globals(tasks_file)
     try:
         exec_(tasks_code, _globs_=exec_globs)
-    except Exception, e:
+    except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not load '{0}' ({1}: {2})".format(tasks_file,
                                                      type(e).__name__, e))

@@ -32,14 +32,14 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task', tasks_file='missing.py')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("Could not get 'missing.py'", e.message)
 
     def test_bad_tasks_file(self):
         try:
             self._execute('test.run_task', tasks_file='corrupted_file.py')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("Could not load 'corrupted_file.py'", e.message)
             self.assertIn("ImportError: No module named module", e.message)
 
@@ -47,7 +47,7 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task', task_name='missing')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("Could not find task", e.message)
             self.assertIn('missing', e.message)
             self.assertIn('fabric_tasks.py', e.message)
@@ -56,7 +56,7 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_task', task_name='non_callable')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn('not callable', e.message)
             self.assertIn('non_callable', e.message)
             self.assertIn('fabric_tasks.py', e.message)
@@ -66,7 +66,7 @@ class FabricPluginTest(unittest.TestCase):
             self._execute('test.run_module_task',
                           task_mapping='module_that_does_not_exist.some_task')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("Could not load 'module_that", e.message)
 
     def test_missing_module_task_attribute(self):
@@ -74,7 +74,7 @@ class FabricPluginTest(unittest.TestCase):
             self._execute('test.run_module_task',
                           task_mapping='fabric_plugin.tests.tests.whoami')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("Could not find 'whoami' in fabric_", e.message)
 
     def test_non_callable_module_task(self):
@@ -83,7 +83,7 @@ class FabricPluginTest(unittest.TestCase):
                 'test.run_module_task',
                 task_mapping='fabric_plugin.tests.tests.non_callable')
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn("'non_callable' in 'fabric_", e.message)
             self.assertIn('not callable', e.message)
 
@@ -125,7 +125,7 @@ class FabricPluginTest(unittest.TestCase):
                           fabric_env={'password': 'test',
                                       'host_string': 'test'})
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertEqual('ssh user definition missing', e.message)
 
     def test_missing_key_or_password(self):
@@ -135,7 +135,7 @@ class FabricPluginTest(unittest.TestCase):
                           fabric_env={'user': 'test',
                                       'host_string': 'test'})
             self.fail()
-        except NonRecoverableError, e:
+        except NonRecoverableError as e:
             self.assertIn('key_filename or password', e.message)
 
     def test_fabric_env_default_override(self):
@@ -247,7 +247,7 @@ class FabricPluginTest(unittest.TestCase):
         try:
             self._execute('test.run_commands', commands=commands)
             self.fail()
-        except tasks.FabricCommandError, e:
+        except tasks.FabricCommandError as e:
             self.assertEqual('mock_stdout', e.output)
             self.assertEqual('mock_stderr', e.error)
             self.assertEqual('mock_command', e.command)
