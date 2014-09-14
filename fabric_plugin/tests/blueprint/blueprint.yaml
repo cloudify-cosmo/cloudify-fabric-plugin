@@ -1,0 +1,48 @@
+inputs:
+    fabric_env:      {}
+    commands:        {}
+    task_name:       {}
+    tasks_file:      {}
+    task_properties: {}
+    task_mapping:    {}
+    ip:              {}
+
+node_templates:
+    test:
+        type: cloudify.types.host
+        properties:
+            ip: { get_input: ip }
+        interfaces:
+            test:
+                - run_commands:
+                    mapping: fabric.fabric_plugin.tasks.run_commands
+                    properties:
+                        commands:   { get_input: commands   }
+                        fabric_env: { get_input: fabric_env }
+                - run_task:
+                    mapping: fabric.fabric_plugin.tasks.run_task
+                    properties:
+                        tasks_file:      { get_input: tasks_file }
+                        task_name:       { get_input: task_name  }
+                        task_properties: { get_input: task_properties }
+                        fabric_env:      { get_input: fabric_env }
+                - run_module_task:
+                    mapping: fabric.fabric_plugin.tasks.run_module_task
+                    properties:
+                        task_mapping:    { get_input: task_mapping }
+                        task_properties: { get_input: task_properties }
+                        fabric_env:      { get_input: fabric_env }
+
+
+workflows:
+    execute_operation:
+        mapping: fabric.fabric_plugin.tests.tests.execute_operation
+        parameters: { operation: {} }
+
+plugins:
+    fabric:
+        derived_from: cloudify.plugins.manager_plugin
+
+node_types:
+    cloudify.types.host:
+        properties: { ip: {} }
