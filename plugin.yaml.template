@@ -3,6 +3,5 @@
 ##################################################################################
 plugins:
     fabric:
-        derived_from: cloudify.plugins.manager_plugin
-        properties:
-            url: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/{{ plugin_branch }}.zip
+        executor: central_deployment_agent
+        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/{{ plugin_branch }}.zip
