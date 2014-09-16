@@ -43,7 +43,8 @@ workflows:
 
 plugins:
     fabric:
-        derived_from: cloudify.plugins.manager_plugin
+        executor: central_deployment_agent
+        install: false
 
 node_types:
     cloudify.types.host:
