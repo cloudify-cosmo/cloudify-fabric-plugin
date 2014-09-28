@@ -24,6 +24,7 @@ from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
 
 from fabric_plugin import tasks
+from cloudify import ctx
 
 
 class FabricPluginTest(unittest.TestCase):
@@ -339,7 +340,7 @@ def execute_operation(operation, **kwargs):
     instance.execute_operation(operation)
 
 
-def module_task(ctx):
+def module_task():
     ctx.runtime_properties['task_called'] = 'called'
 
 non_callable = 1
