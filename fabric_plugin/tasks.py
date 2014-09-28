@@ -50,9 +50,9 @@ def run_task(tasks_file, task_name, fabric_env,
     :param task_properties: optional properties to pass on to the task
                             as invocation kwargs
     """
-    task = _get_task(ctx, tasks_file, task_name)
+    task = _get_task(tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
-    _run_task(task, task_properties, ctx, fabric_env)
+    _run_task(task, task_properties, fabric_env)
 
 
 @operation
@@ -67,13 +67,13 @@ def run_module_task(task_mapping, fabric_env,
     """
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('running task: {0}'.format(task_mapping))
-    _run_task(task, task_properties, ctx, fabric_env)
+    _run_task(task, task_properties, fabric_env)
 
 
-def _run_task(task, task_properties, ctx, fabric_env):
-    with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=False)):
+def _run_task(task, task_properties, fabric_env):
+    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
         task_properties = task_properties or {}
-        task(ctx, **task_properties)
+        task(**task_properties)
 
 
 @operation
@@ -83,7 +83,7 @@ def run_commands(commands, fabric_env, **kwargs):
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
-    with fabric_api.settings(**_fabric_env(ctx, fabric_env, warn_only=True)):
+    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=True)):
         for command in commands:
             ctx.logger.info('running command: {0}'.format(command))
             result = fabric_api.run(command)
@@ -115,10 +115,10 @@ def _get_task_from_mapping(mapping):
     return task
 
 
-def _get_task(_ctx, tasks_file, task_name):
-    _ctx.logger.debug('getting tasks file...')
+def _get_task(tasks_file, task_name):
+    ctx.logger.debug('getting tasks file...')
     try:
-        tasks_code = _ctx.get_resource(tasks_file)
+        tasks_code = ctx.get_resource(tasks_file)
     except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not get '{0}' ({1}: {2})".format(tasks_file,
@@ -203,14 +203,13 @@ class CredentialsHandler():
         return host_string
 
 
-def _fabric_env(_ctx, fabric_env, warn_only):
+def _fabric_env(fabric_env, warn_only):
     """prepares fabric environment variables configuration
 
-    :param _ctx: CloudifyContext instance
     :param fabric_env: fabric configuration
     """
-    _ctx.logger.info('preparing fabric environment...')
-    credentials = CredentialsHandler(_ctx, fabric_env)
+    ctx.logger.info('preparing fabric environment...')
+    credentials = CredentialsHandler(ctx, fabric_env)
     final_env = {}
     final_env.update(FABRIC_ENV_DEFAULTS)
     final_env.update(fabric_env)
@@ -227,7 +226,7 @@ def _fabric_env(_ctx, fabric_env, warn_only):
         raise exceptions.NonRecoverableError(
             'access credentials not supplied '
             '(you must supply at least one of key_filename or password)')
-    _ctx.logger.info('environment prepared successfully')
+    ctx.logger.info('environment prepared successfully')
     return final_env
 
 
