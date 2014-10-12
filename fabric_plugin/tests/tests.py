@@ -341,6 +341,6 @@ def execute_operation(operation, **kwargs):
 
 
 def module_task():
-    ctx.runtime_properties['task_called'] = 'called'
+    ctx.instance.runtime_properties['task_called'] = 'called'
 
 non_callable = 1
