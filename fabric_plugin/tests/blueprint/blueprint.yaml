@@ -11,7 +11,7 @@ inputs:
 
 node_templates:
     test:
-        type: cloudify.types.host
+        type: cloudify.nodes.Compute
         properties:
             ip: { get_input: ip }
         interfaces:
@@ -47,5 +47,5 @@ plugins:
         install: false
 
 node_types:
-    cloudify.types.host:
+    cloudify.nodes.Compute:
         properties: { ip: {} }
