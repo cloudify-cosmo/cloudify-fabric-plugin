@@ -18,14 +18,14 @@ from setuptools import setup
 
 setup(
     name='cloudify-fabric-plugin',
-    version='1.1rc1',
+    version='1.1rc2',
     author='Gigaspaces',
     author_email='cosmo-admin@gigaspaces.com',
     packages=['fabric_plugin'],
     license='LICENSE',
     description='Plugin for reomtely running fabric tasks and command',
     install_requires=[
-        'cloudify-plugins-common==3.1rc1',
+        'cloudify-plugins-common==3.1rc2',
         'fabric==1.8.3',
         'six==1.8.0',
     ]
