@@ -13,14 +13,19 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
+import os
 import importlib
 
 from six import exec_
 from fabric import api as fabric_api
+from fabric.context_managers import remote_tunnel
 
 from cloudify import ctx
 from cloudify import exceptions
 from cloudify.decorators import operation
+from script_runner.proxy.client import CTX_SOCKET_URL
+from script_runner.proxy import client as proxy_client
+from script_runner.proxy import server as proxy_server
 
 from fabric_plugin import exec_env
 
@@ -93,37 +98,28 @@ def run_commands(commands, fabric_env, **kwargs):
 
 @operation
 def run_script(script_path, fabric_env, **kwargs):
-    from fabric.context_managers import remote_tunnel
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
-        from script_runner import ctx_proxy
-        import os
+        proxy = None
         try:
-            proxy = ctx_proxy.HTTPCtxProxy(ctx._get_current_object(),
-                                           port=get_unused_port())
+            proxy_client_path = proxy_client.__file__
+            if proxy_client_path.endswith('.pyc'):
+                proxy_client_path = proxy_client_path[:-1]
             script_path = ctx.download_resource(script_path)
+            base_script_path = os.path.basename(script_path)
             fabric_api.put(script_path, '~')
-            ctx_client_path = '/home/dan/dev/cloudify/cloudify-script-plugin/script_runner/ctx_proxy.py'
-            fabric_api.put(ctx_client_path, '~/ctx')
+            fabric_api.put(proxy_client_path, '~/ctx')
+            proxy = proxy_server.HTTPCtxProxy(ctx._get_current_object())
             commands = ' && '.join([
-                'chmod +x ~/{0}'.format(os.path.basename(script_path)),
+                'chmod +x ~/{0}'.format(base_script_path),
                 'chmod +x ~/ctx',
-                'PATH=~:$PATH CTX_SOCKET_URL={0} ~/{1}'.format(
-                    proxy.socket_url,
-                    os.path.basename(script_path))
+                'PATH=~:$PATH {0}={1} ~/{2}'.format(
+                    CTX_SOCKET_URL, proxy.socket_url, base_script_path)
             ])
             with remote_tunnel(proxy.port):
                 fabric_api.run(commands, shell_escape=False)
         finally:
-            proxy.close()
-
-
-def get_unused_port():
-    import socket
-    sock = socket.socket()
-    sock.bind(('127.0.0.1', 0))
-    _, port = sock.getsockname()
-    sock.close()
-    return port
+            if proxy is not None:
+                proxy.close()
 
 
 def _get_task_from_mapping(mapping):
