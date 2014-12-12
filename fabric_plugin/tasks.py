@@ -98,16 +98,16 @@ def run_commands(commands, fabric_env, **kwargs):
 
 @operation
 def run_script(script_path, fabric_env, **kwargs):
+    proxy_client_path = proxy_client.__file__
+    if proxy_client_path.endswith('.pyc'):
+        proxy_client_path = proxy_client_path[:-1]
+    script_path = ctx.download_resource(script_path)
+    base_script_path = os.path.basename(script_path)
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+        fabric_api.put(script_path, '~')
+        fabric_api.put(proxy_client_path, '~/ctx')
         proxy = None
         try:
-            proxy_client_path = proxy_client.__file__
-            if proxy_client_path.endswith('.pyc'):
-                proxy_client_path = proxy_client_path[:-1]
-            script_path = ctx.download_resource(script_path)
-            base_script_path = os.path.basename(script_path)
-            fabric_api.put(script_path, '~')
-            fabric_api.put(proxy_client_path, '~/ctx')
             proxy = proxy_server.HTTPCtxProxy(ctx._get_current_object())
             commands = ' && '.join([
                 'chmod +x ~/{0}'.format(base_script_path),
