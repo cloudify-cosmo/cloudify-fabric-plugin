@@ -91,6 +91,41 @@ def run_commands(commands, fabric_env, **kwargs):
                 raise FabricCommandError(result)
 
 
+@operation
+def run_script(script_path, fabric_env, **kwargs):
+    from fabric.context_managers import remote_tunnel
+    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+        from script_runner import ctx_proxy
+        import os
+        try:
+            proxy = ctx_proxy.HTTPCtxProxy(ctx._get_current_object(),
+                                           port=get_unused_port())
+            script_path = ctx.download_resource(script_path)
+            fabric_api.put(script_path, '~')
+            ctx_client_path = '/home/dan/dev/cloudify/cloudify-script-plugin/script_runner/ctx_proxy.py'
+            fabric_api.put(ctx_client_path, '~/ctx')
+            commands = ' && '.join([
+                'chmod +x ~/{0}'.format(os.path.basename(script_path)),
+                'chmod +x ~/ctx',
+                'PATH=~:$PATH CTX_SOCKET_URL={0} ~/{1}'.format(
+                    proxy.socket_url,
+                    os.path.basename(script_path))
+            ])
+            with remote_tunnel(proxy.port):
+                fabric_api.run(commands, shell_escape=False)
+        finally:
+            proxy.close()
+
+
+def get_unused_port():
+    import socket
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 0))
+    _, port = sock.getsockname()
+    sock.close()
+    return port
+
+
 def _get_task_from_mapping(mapping):
     split = mapping.split('.')
     module_name = '.'.join(split[:-1])
