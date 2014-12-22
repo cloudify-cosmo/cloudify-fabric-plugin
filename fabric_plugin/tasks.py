@@ -149,12 +149,18 @@ def run_script(script_path, fabric_env, process=None, **kwargs):
 
         proxy = None
         try:
-            proxy = proxy_server.HTTPCtxProxy(ctx._get_current_object())
+            actual_ctx = ctx._get_current_object()
+            proxy = proxy_server.HTTPCtxProxy(actual_ctx)
             export_env_var(CTX_SOCKET_URL, proxy.socket_url)
             export_env_var('PATH', '{0}:$PATH'.format(remote_ctx_dir))
             env_script.write('chmod +x {0}\n'.format(remote_script_path))
             env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
             fabric_api.put(env_script, remote_env_script_path)
+
+            def returns(value):
+                actual_ctx._return_value = value
+            actual_ctx._return_value = None
+            actual_ctx.returns = returns
 
             with fabric_context.cd(cwd):
                 with fabric_context.remote_tunnel(proxy.port):
@@ -162,6 +168,8 @@ def run_script(script_path, fabric_env, process=None, **kwargs):
                         'source {0}'.format(remote_env_script_path),
                         command
                     ]))
+
+            return actual_ctx._return_value
         finally:
             if proxy is not None:
                 proxy.close()
