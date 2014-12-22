@@ -15,10 +15,12 @@
 
 import os
 import importlib
+from StringIO import StringIO
 
 from six import exec_
 from fabric import api as fabric_api
-from fabric.context_managers import remote_tunnel
+from fabric import context_managers as fabric_context
+from fabric.contrib import files as fabric_files
 
 from cloudify import ctx
 from cloudify import exceptions
@@ -57,7 +59,7 @@ def run_task(tasks_file, task_name, fabric_env,
     """
     task = _get_task(tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
-    _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env)
 
 
 @operation
@@ -72,13 +74,13 @@ def run_module_task(task_mapping, fabric_env,
     """
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('running task: {0}'.format(task_mapping))
-    _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env)
 
 
 def _run_task(task, task_properties, fabric_env):
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
         task_properties = task_properties or {}
-        task(**task_properties)
+        return task(**task_properties)
 
 
 @operation
@@ -97,26 +99,69 @@ def run_commands(commands, fabric_env, **kwargs):
 
 
 @operation
-def run_script(script_path, fabric_env, **kwargs):
+def run_script(script_path, fabric_env, process=None, **kwargs):
+
+    process = process or {}
+    temp_dir = process.get('work_dir', '/tmp')
+
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
         proxy_client_path = proxy_client_path[:-1]
-    script_path = ctx.download_resource(script_path)
-    base_script_path = os.path.basename(script_path)
+    local_script_path = ctx.download_resource(script_path)
+    base_script_path = os.path.basename(local_script_path)
+    remote_ctx_dir = '{0}/cloudify-ctx'.format(temp_dir)
+    remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
+    remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
+    remote_work_dir = '{0}/work'.format(remote_ctx_dir)
+    remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
+                                                  base_script_path)
+    remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
+                                          base_script_path)
+
+    env = process.get('env', {})
+    cwd = process.get('cwd', remote_work_dir)
+    args = process.get('args')
+    command_prefix = process.get('command_prefix')
+
+    command = remote_script_path
+    if command_prefix:
+        command = '{0} {1}'.format(command_prefix, command)
+    if args:
+        command = ' '.join([command] + args)
+
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
-        fabric_api.put(script_path, '~')
-        fabric_api.put(proxy_client_path, '~/ctx')
+        if not fabric_files.exists(remote_ctx_dir):
+            # there may be race conditions with other operations that
+            # may be running in parallel, so we pass -p to make sure
+            # we get 0 exit code if the directory already exists
+            fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
+            fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
+            fabric_api.put(proxy_client_path, remote_ctx_path)
+        fabric_api.put(local_script_path, remote_script_path)
+
+        env_script = StringIO()
+
+        def export_env_var(key, value):
+            env_script.write('export {0}={1}\n'.format(key, value))
+
+        for key, value in env.iteritems():
+            export_env_var(key, value)
+
         proxy = None
         try:
             proxy = proxy_server.HTTPCtxProxy(ctx._get_current_object())
-            commands = ' && '.join([
-                'chmod +x ~/{0}'.format(base_script_path),
-                'chmod +x ~/ctx',
-                'PATH=~:$PATH {0}={1} ~/{2}'.format(
-                    CTX_SOCKET_URL, proxy.socket_url, base_script_path)
-            ])
-            with remote_tunnel(proxy.port):
-                fabric_api.run(commands, shell_escape=False)
+            export_env_var(CTX_SOCKET_URL, proxy.socket_url)
+            export_env_var('PATH', '{0}:$PATH'.format(remote_ctx_dir))
+            env_script.write('chmod +x {0}\n'.format(remote_script_path))
+            env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
+            fabric_api.put(env_script, remote_env_script_path)
+
+            with fabric_context.cd(cwd):
+                with fabric_context.remote_tunnel(proxy.port):
+                    fabric_api.run(' && '.join([
+                        'source {0}'.format(remote_env_script_path),
+                        command
+                    ]))
         finally:
             if proxy is not None:
                 proxy.close()

@@ -6,6 +6,7 @@ inputs:
     task_name:       {}
     tasks_file:      {}
     script_path:     {}
+    process:         {}
     task_properties: {}
     task_mapping:    {}
     ip:              {}
@@ -20,8 +21,8 @@ node_templates:
                 run_commands:
                     implementation: fabric.fabric_plugin.tasks.run_commands
                     inputs:
-                        commands:   { get_input: commands   }
-                        fabric_env: { get_input: fabric_env }
+                        commands:        { get_input: commands   }
+                        fabric_env:      { get_input: fabric_env }
                 run_task:
                     implementation: fabric.fabric_plugin.tasks.run_task
                     inputs:
@@ -39,6 +40,7 @@ node_templates:
                     implementation: fabric.fabric_plugin.tasks.run_script
                     inputs:
                         script_path:     { get_input: script_path }
+                        process:         { get_input: process }
                         fabric_env:      { get_input: fabric_env }
 
 

@@ -119,8 +119,17 @@ class FabricPluginTest(unittest.TestCase):
         self.assertIs(True, self.mock.settings_merged['warn_only'])
         self.assertListEqual(self.mock.commands, commands)
 
-    def _test_run_script(self):
-        self._execute('test.run_script', script_path='scripts/script.sh')
+    def test_run_script(self):
+        self._execute('test.run_script',
+                      script_path='scripts/script.sh',
+                      process={
+                          'env': {
+                              'some_env_var': 'some_env_value',
+                          },
+                          'args': ['arg1_val', 'arg2_val', 'arg3_val'],
+                          'cwd': '/tmp',
+                          'work_dir': '/home/vagrant'
+                      })
 
     def test_missing_user(self):
         try:
@@ -283,19 +292,19 @@ class FabricPluginTest(unittest.TestCase):
 
     def setUp(self):
         self.default_fabric_env = {
-            # 'host_string': '11.0.0.7',
-            # 'user': 'vagrant',
-            # 'key_filename': '/home/dan/work/vagrant/precise64/
-            # '.vagrant/machines/default/virtualbox/private_key'
-            'host_string': 'test',
-            'user': 'test',
-            'key_filename': 'test'
+            'host_string': '11.0.0.7',
+            'user': 'vagrant',
+            'key_filename': '/home/dan/work/vagrant/precise64/'
+            '.vagrant/machines/default/virtualbox/private_key'
+            # 'host_string': 'test',
+            # 'user': 'test',
+            # 'key_filename': 'test'
 
         }
         self.original_fabric_api = tasks.fabric_api
         self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
         self.mock = self.MockFabricApi()
-        tasks.fabric_api = self.mock
+        # tasks.fabric_api = self.mock
         self.bootstrap_context = {}
         outer = self
 
@@ -318,6 +327,7 @@ class FabricPluginTest(unittest.TestCase):
                  commands=None,
                  bootstrap_context=None,
                  script_path=None,
+                 process=None,
                  ip=None):
 
         bootstrap_context = bootstrap_context or {}
@@ -331,7 +341,8 @@ class FabricPluginTest(unittest.TestCase):
             'task_properties': task_properties or {},
             'task_mapping': task_mapping or '',
             'ip': ip or '',
-            'script_path': script_path or ''
+            'script_path': script_path or '',
+            'process': process or {}
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
