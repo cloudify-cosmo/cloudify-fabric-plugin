@@ -23,9 +23,9 @@ from fabric.context_managers import remote_tunnel
 from cloudify import ctx
 from cloudify import exceptions
 from cloudify.decorators import operation
-from script_runner.proxy.client import CTX_SOCKET_URL
-from script_runner.proxy import client as proxy_client
-from script_runner.proxy import server as proxy_server
+from cloudify.proxy.client import CTX_SOCKET_URL
+from cloudify.proxy import client as proxy_client
+from cloudify.proxy import server as proxy_server
 
 from fabric_plugin import exec_env
 
