@@ -285,7 +285,8 @@ class FabricPluginTest(unittest.TestCase):
         self.default_fabric_env = {
             'host_string': '11.0.0.7',
             'user': 'vagrant',
-            'key_filename': '/home/dan/work/vagrant/precise64/.vagrant/machines/default/virtualbox/private_key'
+            'key_filename': '/home/dan/work/vagrant/'
+            'precise64/.vagrant/machines/default/virtualbox/private_key'
         }
         self.original_fabric_api = tasks.fabric_api
         self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
