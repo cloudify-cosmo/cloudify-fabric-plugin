@@ -11,11 +11,11 @@ install:
     - pip install tox
     # - pip install coveralls
 script:
-#    - tox -e $TOX_ENV
-    - cat ~/.ssh/authorized_keys
-    - cat ~/.ssh/known_hosts
-    - whoami
-    - ssh localhost -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
+    - tox -e $TOX_ENV
+#    - cat ~/.ssh/authorized_keys
+#    - cat ~/.ssh/known_hosts
+#    - whoami
+#    - ssh localhost -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
 # after_success:
 #     coveralls
 notifications:
