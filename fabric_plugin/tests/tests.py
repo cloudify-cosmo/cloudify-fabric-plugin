@@ -507,17 +507,6 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
             })
         self.assertEqual(return_value, 'content')
 
-    def test_run_script_download_resource_explicit_target_path(self):
-        return_value, _ = self._execute(
-            'test.run_script',
-            script_path='scripts/script.sh',
-            process={
-                'env': {
-                    'test_operation': self._testMethodName
-                }
-            })
-        self.assertEqual(return_value, 'content')
-
 
 @workflow
 def execute_operation(operation, **kwargs):
