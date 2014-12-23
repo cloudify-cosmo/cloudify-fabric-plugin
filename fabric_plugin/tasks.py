@@ -106,6 +106,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
     process = process or {}
     base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
+    ctx_server_port = process.get('ctx_server_port')
 
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
@@ -148,7 +149,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
         actual_ctx._return_value = None
         actual_ctx.returns = returns
 
-        proxy = proxy_server.HTTPCtxProxy(actual_ctx)
+        proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
 
         env_script = StringIO()
         env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)

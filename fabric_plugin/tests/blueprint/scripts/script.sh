@@ -34,5 +34,9 @@ test_run_script_return_value() {
     ctx returns $return_value
 }
 
+test_run_script_ctx_server_port() {
+    ctx returns $CTX_SOCKET_URL
+}
+
 # Injected by test
 ${test_operation} $@

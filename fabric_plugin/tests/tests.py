@@ -350,14 +350,19 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
         self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
-        if getpass.getuser() != 'travis':
-            raise unittest.SkipTest()
+        # if getpass.getuser() != 'travis':
+        #     raise unittest.SkipTest()
 
         super(FabricPluginRealSSHTests, self).setUp()
+        # self.default_fabric_env = {
+        #     'host_string': 'localhost',
+        #     'user': 'travis',
+        #     'password': 'travis'
+        # }
         self.default_fabric_env = {
-            'host_string': 'localhost',
-            'user': 'travis',
-            'password': 'travis'
+            'host_string': '11.0.0.7',
+            'user': 'vagrant',
+            'password': 'vagrant'
         }
         tasks.fabric_api = self.original_fabric_api
         with context_managers.settings(**self.default_fabric_env):
@@ -481,6 +486,20 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 'command_prefix': 'dash'
             })
         self.assertEqual(return_value, expected_return_value)
+
+    def test_run_script_ctx_server_port(self):
+        from cloudify.proxy import server
+        expected_port = server.get_unused_port()
+        return_value, _ = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName
+                },
+                'ctx_server_port': expected_port
+            })
+        self.assertIn(':{0}'.format(expected_port), return_value)
 
 
 @workflow
