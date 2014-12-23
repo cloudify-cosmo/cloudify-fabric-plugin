@@ -38,5 +38,14 @@ test_run_script_ctx_server_port() {
     ctx returns $CTX_SOCKET_URL
 }
 
+test_run_script_download_resource() {
+    ctx returns $(cat $(ctx download-resource test_resource))
+}
+
+test_run_script_download_resource_explicit_target_path() {
+    ctx download-resource test_resource /tmp/hello
+    ctx returns $(cat /tmp/hello)
+}
+
 # Injected by test
 ${test_operation} $@

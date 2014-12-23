@@ -149,6 +149,21 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
         actual_ctx._return_value = None
         actual_ctx.returns = returns
 
+        original_download_resource = actual_ctx.download_resource
+
+        def download_resource(resource_path, target_path=None):
+            local_target_path = original_download_resource(resource_path,
+                                                           target_path)
+            if target_path:
+                remote_target_path = target_path
+            else:
+                remote_target_path = '{0}/{1}'.format(
+                    remote_work_dir,
+                    os.path.basename(local_target_path))
+            fabric_api.put(local_target_path, remote_target_path)
+            return remote_target_path
+        actual_ctx.download_resource = download_resource
+
         proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
 
         env_script = StringIO()
