@@ -50,7 +50,7 @@ FABRIC_ENV_DEFAULTS = {
 
 
 @operation
-def run_task(tasks_file, task_name, fabric_env,
+def run_task(tasks_file, task_name, fabric_env=None,
              task_properties=None, **kwargs):
     """runs the specified fabric task loaded from 'tasks_file'
 
@@ -66,7 +66,7 @@ def run_task(tasks_file, task_name, fabric_env,
 
 
 @operation
-def run_module_task(task_mapping, fabric_env,
+def run_module_task(task_mapping, fabric_env=None,
                     task_properties=None, **kwargs):
     """runs the specified fabric module task specified by mapping'
 
@@ -87,7 +87,7 @@ def _run_task(task, task_properties, fabric_env):
 
 
 @operation
-def run_commands(commands, fabric_env, **kwargs):
+def run_commands(commands, fabric_env=None, **kwargs):
     """runs the provider 'commands' in sequence
 
     :param commands: a list of commands to run
@@ -102,7 +102,7 @@ def run_commands(commands, fabric_env, **kwargs):
 
 
 @operation
-def run_script(script_path, fabric_env, process=None, **kwargs):
+def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
     process = process or {}
     base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
@@ -287,6 +287,7 @@ def _fabric_env(fabric_env, warn_only):
     :param fabric_env: fabric configuration
     """
     ctx.logger.info('preparing fabric environment...')
+    fabric_env = fabric_env or {}
     credentials = CredentialsHandler(ctx, fabric_env)
     final_env = {}
     final_env.update(FABRIC_ENV_DEFAULTS)
