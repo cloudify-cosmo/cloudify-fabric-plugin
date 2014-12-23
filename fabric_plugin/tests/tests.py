@@ -367,6 +367,7 @@ class FabricPluginRunScriptTest(BaseFabricPluginTest):
                           'work_dir': '/home/vagrant'
                       })
 
+
 @workflow
 def execute_operation(operation, **kwargs):
     node = next(workflow_ctx.nodes)
