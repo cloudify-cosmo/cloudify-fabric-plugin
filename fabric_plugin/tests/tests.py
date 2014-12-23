@@ -18,6 +18,10 @@ import unittest
 import contextlib
 import getpass
 
+from fabric import api
+from fabric.contrib import files
+from fabric import context_managers
+
 from cloudify.exceptions import NonRecoverableError
 from cloudify.workflows import local
 from cloudify.workflows import ctx as workflow_ctx
@@ -108,9 +112,10 @@ class BaseFabricPluginTest(unittest.TestCase):
         self.env = local.init_env(blueprint_path,
                                   name=self._testMethodName,
                                   inputs=inputs)
-        self.env.execute('execute_operation',
-                         parameters={'operation': operation},
-                         task_retries=0)
+        result = self.env.execute('execute_operation',
+                                  parameters={'operation': operation},
+                                  task_retries=0)
+        return result, self.env
 
 
 class FabricPluginTest(BaseFabricPluginTest):
@@ -341,38 +346,148 @@ class FabricPluginTest(BaseFabricPluginTest):
             self.assertEqual(1, e.code)
 
 
-class FabricPluginRunScriptTest(BaseFabricPluginTest):
+class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
+        self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
         if getpass.getuser() != 'travis':
             raise unittest.SkipTest()
 
-        super(FabricPluginRunScriptTest, self).setUp()
+        super(FabricPluginRealSSHTests, self).setUp()
         self.default_fabric_env = {
             'host_string': 'localhost',
             'user': 'travis',
             'password': 'travis'
         }
         tasks.fabric_api = self.original_fabric_api
+        with context_managers.settings(**self.default_fabric_env):
+            if files.exists(tasks.DEFAULT_BASE_DIR):
+                api.run('rm -rf {0}'.format(tasks.DEFAULT_BASE_DIR))
+            if files.exists(self.CUSTOM_BASE_DIR):
+                api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
 
     def test_run_script(self):
-        self._execute('test.run_script',
-                      script_path='scripts/script.sh',
-                      process={
-                          'env': {
-                              'some_env_var': 'some_env_value',
-                              },
-                          'args': ['arg1_val', 'arg2_val', 'arg3_val'],
-                          'cwd': '/tmp',
-                          'work_dir': '/home/vagrant'
-                      })
+        expected_runtime_property_value = 'some_value'
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'test_value': expected_runtime_property_value
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_runtime_property_value,
+                         instance.runtime_properties['test_value'])
+
+    def test_run_script_default_base_dir(self):
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual('{0}/work'.format(tasks.DEFAULT_BASE_DIR),
+                         instance.runtime_properties['work_dir'])
+
+    def test_run_script_process_config(self):
+        expected_env_value = 'test_value_env'
+        expected_arg1_value = 'test_value_arg1'
+        expected_arg2_value = 'test_value_arg2'
+        expected_cwd = '/tmp'
+        expected_base_dir = self.CUSTOM_BASE_DIR
+
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'test_value_env': expected_env_value
+                },
+                'args': [expected_arg1_value, expected_arg2_value],
+                'cwd': expected_cwd,
+                'base_dir': expected_base_dir
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_env_value,
+                         instance.runtime_properties['env_value'])
+        self.assertTrue(len(instance.runtime_properties['bash_version']) > 0)
+        self.assertEqual(expected_arg1_value,
+                         instance.runtime_properties['arg1_value'])
+        self.assertEqual(expected_arg2_value,
+                         instance.runtime_properties['arg2_value'])
+        self.assertEqual(expected_cwd,
+                         instance.runtime_properties['cwd'])
+        self.assertEqual('{0}/ctx'.format(expected_base_dir),
+                         instance.runtime_properties['ctx_path'])
+
+    def test_run_script_command_prefix(self):
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                },
+                'command_prefix': 'dash'
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(len(instance.runtime_properties['bash_version']), 0)
+        self.assertEqual('sanity', instance.runtime_properties['sanity'])
+
+    def test_run_script_reuse_existing_ctx(self):
+        expected_test_value_1 = 'test_value_1'
+        expected_test_value_2 = 'test_value_2'
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': '{0}_1'.format(self._testMethodName),
+                    'test_value': expected_test_value_1
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_test_value_1,
+                         instance.runtime_properties['test_value'])
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': '{0}_2'.format(self._testMethodName),
+                    'test_value': expected_test_value_2
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_test_value_2,
+                         instance.runtime_properties['test_value'])
+
+    def test_run_script_return_value(self):
+        expected_return_value = 'expected_return_value'
+        return_value, _ = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'return_value': expected_return_value
+                },
+                'command_prefix': 'dash'
+            })
+        self.assertEqual(return_value, expected_return_value)
 
 
 @workflow
 def execute_operation(operation, **kwargs):
     node = next(workflow_ctx.nodes)
     instance = next(node.instances)
-    instance.execute_operation(operation)
+    return instance.execute_operation(operation).get()
 
 
 def module_task():

@@ -1,10 +1,38 @@
 #!/bin/bash -e
 
-ctx logger info "It works!!!"
-ctx logger info "instance id: $(ctx instance id)"
-ctx logger info "task name: $(ctx task-name)"
-ctx logger info "some_env_var: $some_env_var"
-ctx logger info "cwd: $PWD"
-ctx logger info "arg0: $0"
-ctx logger info "arg1: $1"
-ctx logger info "arg2: $2"
+test_run_script() {
+    ctx instance runtime-properties test_value $test_value
+}
+
+test_run_script_default_base_dir() {
+    ctx instance runtime-properties work_dir $PWD
+}
+
+test_run_script_process_config() {
+    ctx instance runtime-properties env_value $test_value_env
+    ctx instance runtime-properties bash_version $BASH_VERSION
+    ctx instance runtime-properties arg1_value $1
+    ctx instance runtime-properties arg2_value $2
+    ctx instance runtime-properties cwd $PWD
+    ctx instance runtime-properties ctx_path $(which ctx)
+}
+
+test_run_script_command_prefix() {
+    ctx instance runtime-properties sanity sanity
+    ctx instance runtime-properties bash_version $BASH_VERSION
+}
+
+test_run_script_reuse_existing_ctx_1() {
+    ctx instance runtime-properties test_value $test_value
+}
+
+test_run_script_reuse_existing_ctx_2() {
+    ctx instance runtime-properties test_value $test_value
+}
+
+test_run_script_return_value() {
+    ctx returns $return_value
+}
+
+# Injected by test
+${test_operation} $@

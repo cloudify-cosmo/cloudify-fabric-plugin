@@ -31,6 +31,9 @@ from cloudify.proxy import server as proxy_server
 
 from fabric_plugin import exec_env
 
+
+DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
+
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
     'timeout': 10,
@@ -102,14 +105,14 @@ def run_commands(commands, fabric_env, **kwargs):
 def run_script(script_path, fabric_env, process=None, **kwargs):
 
     process = process or {}
-    work_dir = process.get('work_dir', '/tmp')
+    base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
 
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
         proxy_client_path = proxy_client_path[:-1]
     local_script_path = ctx.download_resource(script_path)
     base_script_path = os.path.basename(local_script_path)
-    remote_ctx_dir = '{0}/cloudify-ctx'.format(work_dir)
+    remote_ctx_dir = base_dir
     remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
     remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
     remote_work_dir = '{0}/work'.format(remote_ctx_dir)
