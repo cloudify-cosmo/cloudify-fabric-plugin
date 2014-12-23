@@ -13,16 +13,26 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
+import os
 import importlib
+from StringIO import StringIO
 
 from six import exec_
 from fabric import api as fabric_api
+from fabric import context_managers as fabric_context
+from fabric.contrib import files as fabric_files
 
 from cloudify import ctx
 from cloudify import exceptions
 from cloudify.decorators import operation
+from cloudify.proxy.client import CTX_SOCKET_URL
+from cloudify.proxy import client as proxy_client
+from cloudify.proxy import server as proxy_server
 
 from fabric_plugin import exec_env
+
+
+DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
@@ -40,7 +50,7 @@ FABRIC_ENV_DEFAULTS = {
 
 
 @operation
-def run_task(tasks_file, task_name, fabric_env,
+def run_task(tasks_file, task_name, fabric_env=None,
              task_properties=None, **kwargs):
     """runs the specified fabric task loaded from 'tasks_file'
 
@@ -52,11 +62,11 @@ def run_task(tasks_file, task_name, fabric_env,
     """
     task = _get_task(tasks_file, task_name)
     ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
-    _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env)
 
 
 @operation
-def run_module_task(task_mapping, fabric_env,
+def run_module_task(task_mapping, fabric_env=None,
                     task_properties=None, **kwargs):
     """runs the specified fabric module task specified by mapping'
 
@@ -67,17 +77,17 @@ def run_module_task(task_mapping, fabric_env,
     """
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('running task: {0}'.format(task_mapping))
-    _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env)
 
 
 def _run_task(task, task_properties, fabric_env):
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
         task_properties = task_properties or {}
-        task(**task_properties)
+        return task(**task_properties)
 
 
 @operation
-def run_commands(commands, fabric_env, **kwargs):
+def run_commands(commands, fabric_env=None, **kwargs):
     """runs the provider 'commands' in sequence
 
     :param commands: a list of commands to run
@@ -89,6 +99,90 @@ def run_commands(commands, fabric_env, **kwargs):
             result = fabric_api.run(command)
             if result.failed:
                 raise FabricCommandError(result)
+
+
+@operation
+def run_script(script_path, fabric_env=None, process=None, **kwargs):
+
+    process = process or {}
+    base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
+    ctx_server_port = process.get('ctx_server_port')
+
+    proxy_client_path = proxy_client.__file__
+    if proxy_client_path.endswith('.pyc'):
+        proxy_client_path = proxy_client_path[:-1]
+    local_script_path = ctx.download_resource(script_path)
+    base_script_path = os.path.basename(local_script_path)
+    remote_ctx_dir = base_dir
+    remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
+    remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
+    remote_work_dir = '{0}/work'.format(remote_ctx_dir)
+    remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
+                                                  base_script_path)
+    remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
+                                          base_script_path)
+
+    env = process.get('env', {})
+    cwd = process.get('cwd', remote_work_dir)
+    args = process.get('args')
+    command_prefix = process.get('command_prefix')
+
+    command = remote_script_path
+    if command_prefix:
+        command = '{0} {1}'.format(command_prefix, command)
+    if args:
+        command = ' '.join([command] + args)
+
+    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+        if not fabric_files.exists(remote_ctx_dir):
+            # there may be race conditions with other operations that
+            # may be running in parallel, so we pass -p to make sure
+            # we get 0 exit code if the directory already exists
+            fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
+            fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
+            fabric_api.put(proxy_client_path, remote_ctx_path)
+
+        actual_ctx = ctx._get_current_object()
+
+        def returns(_value):
+            actual_ctx._return_value = _value
+        actual_ctx._return_value = None
+        actual_ctx.returns = returns
+
+        original_download_resource = actual_ctx.download_resource
+
+        def download_resource(resource_path, target_path=None):
+            local_target_path = original_download_resource(resource_path,
+                                                           target_path)
+            if target_path:
+                remote_target_path = target_path
+            else:
+                remote_target_path = '{0}/{1}'.format(
+                    remote_work_dir,
+                    os.path.basename(local_target_path))
+            fabric_api.put(local_target_path, remote_target_path)
+            return remote_target_path
+        actual_ctx.download_resource = download_resource
+
+        proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
+
+        env_script = StringIO()
+        env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)
+        env[CTX_SOCKET_URL] = proxy.socket_url
+        for key, value in env.iteritems():
+            env_script.write('export {0}={1}\n'.format(key, value))
+        env_script.write('chmod +x {0}\n'.format(remote_script_path))
+        env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
+        try:
+            fabric_api.put(local_script_path, remote_script_path)
+            fabric_api.put(env_script, remote_env_script_path)
+            with fabric_context.cd(cwd):
+                with fabric_context.remote_tunnel(proxy.port):
+                    fabric_api.run('source {0} && {1}'
+                                   .format(remote_env_script_path, command))
+            return actual_ctx._return_value
+        finally:
+            proxy.close()
 
 
 def _get_task_from_mapping(mapping):
@@ -209,6 +303,7 @@ def _fabric_env(fabric_env, warn_only):
     :param fabric_env: fabric configuration
     """
     ctx.logger.info('preparing fabric environment...')
+    fabric_env = fabric_env or {}
     credentials = CredentialsHandler(ctx, fabric_env)
     final_env = {}
     final_env.update(FABRIC_ENV_DEFAULTS)

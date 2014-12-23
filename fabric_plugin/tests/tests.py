@@ -16,6 +16,11 @@
 import os
 import unittest
 import contextlib
+import getpass
+
+from fabric import api
+from fabric.contrib import files
+from fabric import context_managers
 
 from cloudify.exceptions import NonRecoverableError
 from cloudify.workflows import local
@@ -27,7 +32,93 @@ from fabric_plugin import tasks
 from cloudify import ctx
 
 
-class FabricPluginTest(unittest.TestCase):
+class BaseFabricPluginTest(unittest.TestCase):
+
+    class MockCommandResult(object):
+
+        def __init__(self, failed):
+            self.failed = failed
+            self.stdout = 'mock_stdout'
+            self.stderr = 'mock_stderr'
+            self.command = 'mock_command'
+            self.return_code = 1
+
+    class MockFabricApi(object):
+
+        def __init__(self):
+            self.commands = []
+            self.settings_merged = {}
+
+        @contextlib.contextmanager
+        def settings(self, **kwargs):
+            self.settings_merged.update(kwargs)
+            yield
+
+        def run(self, command):
+            self.commands.append(command)
+            return BaseFabricPluginTest.MockCommandResult(command == 'fail')
+
+    def setUp(self):
+        self.default_fabric_env = {
+            'host_string': 'test',
+            'user': 'test',
+            'key_filename': 'test'
+        }
+        self.original_fabric_api = tasks.fabric_api
+        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
+        self.mock = self.MockFabricApi()
+        tasks.fabric_api = self.mock
+        self.bootstrap_context = {}
+        outer = self
+
+        def mock_get_bootstrap_context(self):
+            return outer.bootstrap_context
+        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
+        self.addCleanup(self.cleanup)
+
+    def cleanup(self):
+        tasks.fabric_api = self.original_fabric_api
+        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
+
+    def _execute(self,
+                 operation,
+                 fabric_env=None,
+                 task_name=None,
+                 tasks_file=None,
+                 task_properties=None,
+                 task_mapping=None,
+                 commands=None,
+                 bootstrap_context=None,
+                 script_path=None,
+                 process=None,
+                 ip=None):
+
+        bootstrap_context = bootstrap_context or {}
+        self.bootstrap_context.update(bootstrap_context)
+
+        inputs = {
+            'fabric_env': fabric_env or self.default_fabric_env,
+            'task_name': task_name or 'stub',
+            'commands': commands or [],
+            'tasks_file': tasks_file or 'fabric_tasks.py',
+            'task_properties': task_properties or {},
+            'task_mapping': task_mapping or '',
+            'ip': ip or '',
+            'script_path': script_path or '',
+            'process': process or {}
+        }
+        blueprint_path = os.path.join(os.path.dirname(__file__),
+                                      'blueprint', 'blueprint.yaml')
+        self.env = local.init_env(blueprint_path,
+                                  name=self._testMethodName,
+                                  inputs=inputs)
+        result = self.env.execute('execute_operation',
+                                  parameters={'operation': operation},
+                                  task_retries=0)
+        return result, self.env
+
+
+class FabricPluginTest(BaseFabricPluginTest):
 
     def test_missing_tasks_file(self):
         try:
@@ -254,90 +345,174 @@ class FabricPluginTest(unittest.TestCase):
             self.assertEqual('mock_command', e.command)
             self.assertEqual(1, e.code)
 
-    class MockCommandResult(object):
 
-        def __init__(self, failed):
-            self.failed = failed
-            self.stdout = 'mock_stdout'
-            self.stderr = 'mock_stderr'
-            self.command = 'mock_command'
-            self.return_code = 1
-
-    class MockFabricApi(object):
-
-        def __init__(self):
-            self.commands = []
-            self.settings_merged = {}
-
-        @contextlib.contextmanager
-        def settings(self, **kwargs):
-            self.settings_merged.update(kwargs)
-            yield
-
-        def run(self, command):
-            self.commands.append(command)
-            return FabricPluginTest.MockCommandResult(command == 'fail')
+class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
+        self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
+        if getpass.getuser() != 'travis':
+            raise unittest.SkipTest()
+
+        super(FabricPluginRealSSHTests, self).setUp()
         self.default_fabric_env = {
-            'host_string': 'test',
-            'user': 'test',
-            'key_filename': 'test'
+            'host_string': 'localhost',
+            'user': 'travis',
+            'password': 'travis'
         }
-        self.original_fabric_api = tasks.fabric_api
-        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
-        self.mock = self.MockFabricApi()
-        tasks.fabric_api = self.mock
-        self.bootstrap_context = {}
-        outer = self
-
-        def mock_get_bootstrap_context(self):
-            return outer.bootstrap_context
-        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
-        self.addCleanup(self.cleanup)
-
-    def cleanup(self):
         tasks.fabric_api = self.original_fabric_api
-        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
+        with context_managers.settings(**self.default_fabric_env):
+            if files.exists(tasks.DEFAULT_BASE_DIR):
+                api.run('rm -rf {0}'.format(tasks.DEFAULT_BASE_DIR))
+            if files.exists(self.CUSTOM_BASE_DIR):
+                api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
 
-    def _execute(self,
-                 operation,
-                 fabric_env=None,
-                 task_name=None,
-                 tasks_file=None,
-                 task_properties=None,
-                 task_mapping=None,
-                 commands=None,
-                 bootstrap_context=None,
-                 ip=None):
+    def test_run_script(self):
+        expected_runtime_property_value = 'some_value'
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'test_value': expected_runtime_property_value
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_runtime_property_value,
+                         instance.runtime_properties['test_value'])
 
-        bootstrap_context = bootstrap_context or {}
-        self.bootstrap_context.update(bootstrap_context)
+    def test_run_script_default_base_dir(self):
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual('{0}/work'.format(tasks.DEFAULT_BASE_DIR),
+                         instance.runtime_properties['work_dir'])
 
-        inputs = {
-            'fabric_env': fabric_env or self.default_fabric_env,
-            'task_name': task_name or 'stub',
-            'commands': commands or [],
-            'tasks_file': tasks_file or 'fabric_tasks.py',
-            'task_properties': task_properties or {},
-            'task_mapping': task_mapping or '',
-            'ip': ip or '',
-        }
-        blueprint_path = os.path.join(os.path.dirname(__file__),
-                                      'blueprint', 'blueprint.yaml')
-        self.env = local.init_env(blueprint_path,
-                                  name=self._testMethodName,
-                                  inputs=inputs)
-        self.env.execute('execute_operation',
-                         parameters={'operation': operation},
-                         task_retries=0)
+    def test_run_script_process_config(self):
+        expected_env_value = 'test_value_env'
+        expected_arg1_value = 'test_value_arg1'
+        expected_arg2_value = 'test_value_arg2'
+        expected_cwd = '/tmp'
+        expected_base_dir = self.CUSTOM_BASE_DIR
+
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'test_value_env': expected_env_value
+                },
+                'args': [expected_arg1_value, expected_arg2_value],
+                'cwd': expected_cwd,
+                'base_dir': expected_base_dir
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_env_value,
+                         instance.runtime_properties['env_value'])
+        self.assertTrue(len(instance.runtime_properties['bash_version']) > 0)
+        self.assertEqual(expected_arg1_value,
+                         instance.runtime_properties['arg1_value'])
+        self.assertEqual(expected_arg2_value,
+                         instance.runtime_properties['arg2_value'])
+        self.assertEqual(expected_cwd,
+                         instance.runtime_properties['cwd'])
+        self.assertEqual('{0}/ctx'.format(expected_base_dir),
+                         instance.runtime_properties['ctx_path'])
+
+    def test_run_script_command_prefix(self):
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                },
+                'command_prefix': 'dash'
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(len(instance.runtime_properties['bash_version']), 0)
+        self.assertEqual('sanity', instance.runtime_properties['sanity'])
+
+    def test_run_script_reuse_existing_ctx(self):
+        expected_test_value_1 = 'test_value_1'
+        expected_test_value_2 = 'test_value_2'
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': '{0}_1'.format(self._testMethodName),
+                    'test_value': expected_test_value_1
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_test_value_1,
+                         instance.runtime_properties['test_value'])
+        _, env = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': '{0}_2'.format(self._testMethodName),
+                    'test_value': expected_test_value_2
+                },
+            })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_test_value_2,
+                         instance.runtime_properties['test_value'])
+
+    def test_run_script_return_value(self):
+        expected_return_value = 'expected_return_value'
+        return_value, _ = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'return_value': expected_return_value
+                },
+                'command_prefix': 'dash'
+            })
+        self.assertEqual(return_value, expected_return_value)
+
+    def test_run_script_ctx_server_port(self):
+        from cloudify.proxy import server
+        expected_port = server.get_unused_port()
+        return_value, _ = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName
+                },
+                'ctx_server_port': expected_port
+            })
+        self.assertIn(':{0}'.format(expected_port), return_value)
+
+    def test_run_script_download_resource(self):
+        return_value, _ = self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName
+                }
+            })
+        self.assertEqual(return_value, 'content')
 
 
 @workflow
 def execute_operation(operation, **kwargs):
     node = next(workflow_ctx.nodes)
     instance = next(node.instances)
-    instance.execute_operation(operation)
+    return instance.execute_operation(operation).get()
 
 
 def module_task():
