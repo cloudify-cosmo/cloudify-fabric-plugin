@@ -137,42 +137,33 @@ def run_script(script_path, fabric_env, process=None, **kwargs):
             fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
             fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
             fabric_api.put(proxy_client_path, remote_ctx_path)
-        fabric_api.put(local_script_path, remote_script_path)
+
+        actual_ctx = ctx._get_current_object()
+
+        def returns(_value):
+            actual_ctx._return_value = _value
+        actual_ctx._return_value = None
+        actual_ctx.returns = returns
+
+        proxy = proxy_server.HTTPCtxProxy(actual_ctx)
 
         env_script = StringIO()
-
-        def export_env_var(_key, _value):
-            env_script.write('export {0}={1}\n'.format(_key, _value))
-
+        env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)
+        env[CTX_SOCKET_URL] = proxy.socket_url
         for key, value in env.iteritems():
-            export_env_var(key, value)
-
-        proxy = None
+            env_script.write('export {0}={1}\n'.format(key, value))
+        env_script.write('chmod +x {0}\n'.format(remote_script_path))
+        env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
         try:
-            actual_ctx = ctx._get_current_object()
-            proxy = proxy_server.HTTPCtxProxy(actual_ctx)
-            export_env_var(CTX_SOCKET_URL, proxy.socket_url)
-            export_env_var('PATH', '{0}:$PATH'.format(remote_ctx_dir))
-            env_script.write('chmod +x {0}\n'.format(remote_script_path))
-            env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
+            fabric_api.put(local_script_path, remote_script_path)
             fabric_api.put(env_script, remote_env_script_path)
-
-            def returns(_value):
-                actual_ctx._return_value = _value
-            actual_ctx._return_value = None
-            actual_ctx.returns = returns
-
             with fabric_context.cd(cwd):
                 with fabric_context.remote_tunnel(proxy.port):
-                    fabric_api.run(' && '.join([
-                        'source {0}'.format(remote_env_script_path),
-                        command
-                    ]))
-
+                    fabric_api.run('source {0} && {1}'
+                                   .format(remote_env_script_path, command))
             return actual_ctx._return_value
         finally:
-            if proxy is not None:
-                proxy.close()
+            proxy.close()
 
 
 def _get_task_from_mapping(mapping):
