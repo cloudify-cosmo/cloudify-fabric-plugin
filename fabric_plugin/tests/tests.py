@@ -350,19 +350,14 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
         self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
-        # if getpass.getuser() != 'travis':
-        #     raise unittest.SkipTest()
+        if getpass.getuser() != 'travis':
+            raise unittest.SkipTest()
 
         super(FabricPluginRealSSHTests, self).setUp()
-        # self.default_fabric_env = {
-        #     'host_string': 'localhost',
-        #     'user': 'travis',
-        #     'password': 'travis'
-        # }
         self.default_fabric_env = {
-            'host_string': '11.0.0.7',
-            'user': 'vagrant',
-            'password': 'vagrant'
+            'host_string': 'localhost',
+            'user': 'travis',
+            'password': 'travis'
         }
         tasks.fabric_api = self.original_fabric_api
         with context_managers.settings(**self.default_fabric_env):
