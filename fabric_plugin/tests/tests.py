@@ -16,6 +16,7 @@
 import os
 import unittest
 import contextlib
+import getpass
 
 from cloudify.exceptions import NonRecoverableError
 from cloudify.workflows import local
@@ -27,7 +28,92 @@ from fabric_plugin import tasks
 from cloudify import ctx
 
 
-class FabricPluginTest(unittest.TestCase):
+class BaseFabricPluginTest(unittest.TestCase):
+
+    class MockCommandResult(object):
+
+        def __init__(self, failed):
+            self.failed = failed
+            self.stdout = 'mock_stdout'
+            self.stderr = 'mock_stderr'
+            self.command = 'mock_command'
+            self.return_code = 1
+
+    class MockFabricApi(object):
+
+        def __init__(self):
+            self.commands = []
+            self.settings_merged = {}
+
+        @contextlib.contextmanager
+        def settings(self, **kwargs):
+            self.settings_merged.update(kwargs)
+            yield
+
+        def run(self, command):
+            self.commands.append(command)
+            return BaseFabricPluginTest.MockCommandResult(command == 'fail')
+
+    def setUp(self):
+        self.default_fabric_env = {
+            'host_string': 'test',
+            'user': 'test',
+            'key_filename': 'test'
+        }
+        self.original_fabric_api = tasks.fabric_api
+        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
+        self.mock = self.MockFabricApi()
+        tasks.fabric_api = self.mock
+        self.bootstrap_context = {}
+        outer = self
+
+        def mock_get_bootstrap_context(self):
+            return outer.bootstrap_context
+        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
+        self.addCleanup(self.cleanup)
+
+    def cleanup(self):
+        tasks.fabric_api = self.original_fabric_api
+        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
+
+    def _execute(self,
+                 operation,
+                 fabric_env=None,
+                 task_name=None,
+                 tasks_file=None,
+                 task_properties=None,
+                 task_mapping=None,
+                 commands=None,
+                 bootstrap_context=None,
+                 script_path=None,
+                 process=None,
+                 ip=None):
+
+        bootstrap_context = bootstrap_context or {}
+        self.bootstrap_context.update(bootstrap_context)
+
+        inputs = {
+            'fabric_env': fabric_env or self.default_fabric_env,
+            'task_name': task_name or 'stub',
+            'commands': commands or [],
+            'tasks_file': tasks_file or 'fabric_tasks.py',
+            'task_properties': task_properties or {},
+            'task_mapping': task_mapping or '',
+            'ip': ip or '',
+            'script_path': script_path or '',
+            'process': process or {}
+        }
+        blueprint_path = os.path.join(os.path.dirname(__file__),
+                                      'blueprint', 'blueprint.yaml')
+        self.env = local.init_env(blueprint_path,
+                                  name=self._testMethodName,
+                                  inputs=inputs)
+        self.env.execute('execute_operation',
+                         parameters={'operation': operation},
+                         task_retries=0)
+
+
+class FabricPluginTest(BaseFabricPluginTest):
 
     def test_missing_tasks_file(self):
         try:
@@ -118,18 +204,6 @@ class FabricPluginTest(unittest.TestCase):
                                       self.mock.settings_merged)
         self.assertIs(True, self.mock.settings_merged['warn_only'])
         self.assertListEqual(self.mock.commands, commands)
-
-    def test_run_script(self):
-        self._execute('test.run_script',
-                      script_path='scripts/script.sh',
-                      process={
-                          'env': {
-                              'some_env_var': 'some_env_value',
-                          },
-                          'args': ['arg1_val', 'arg2_val', 'arg3_val'],
-                          'cwd': '/tmp',
-                          'work_dir': '/home/vagrant'
-                      })
 
     def test_missing_user(self):
         try:
@@ -266,93 +340,32 @@ class FabricPluginTest(unittest.TestCase):
             self.assertEqual('mock_command', e.command)
             self.assertEqual(1, e.code)
 
-    class MockCommandResult(object):
 
-        def __init__(self, failed):
-            self.failed = failed
-            self.stdout = 'mock_stdout'
-            self.stderr = 'mock_stderr'
-            self.command = 'mock_command'
-            self.return_code = 1
-
-    class MockFabricApi(object):
-
-        def __init__(self):
-            self.commands = []
-            self.settings_merged = {}
-
-        @contextlib.contextmanager
-        def settings(self, **kwargs):
-            self.settings_merged.update(kwargs)
-            yield
-
-        def run(self, command):
-            self.commands.append(command)
-            return FabricPluginTest.MockCommandResult(command == 'fail')
+class FabricPluginRunScriptTest(BaseFabricPluginTest):
 
     def setUp(self):
+        if getpass.getuser() != 'travis':
+            raise unittest.SkipTest()
+
+        super(FabricPluginRunScriptTest, self).setUp()
         self.default_fabric_env = {
             'host_string': 'localhost',
             'user': 'travis',
             'password': 'travis'
-            # 'key_filename': '/home/dan/work/vagrant/precise64/'
-            # '.vagrant/machines/default/virtualbox/private_key'
-            # 'host_string': 'test',
-            # 'user': 'test',
-            # 'key_filename': 'test'
         }
-        self.original_fabric_api = tasks.fabric_api
-        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
-        self.mock = self.MockFabricApi()
-        # tasks.fabric_api = self.mock
-        self.bootstrap_context = {}
-        outer = self
-
-        def mock_get_bootstrap_context(self):
-            return outer.bootstrap_context
-        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
-        self.addCleanup(self.cleanup)
-
-    def cleanup(self):
         tasks.fabric_api = self.original_fabric_api
-        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
 
-    def _execute(self,
-                 operation,
-                 fabric_env=None,
-                 task_name=None,
-                 tasks_file=None,
-                 task_properties=None,
-                 task_mapping=None,
-                 commands=None,
-                 bootstrap_context=None,
-                 script_path=None,
-                 process=None,
-                 ip=None):
-
-        bootstrap_context = bootstrap_context or {}
-        self.bootstrap_context.update(bootstrap_context)
-
-        inputs = {
-            'fabric_env': fabric_env or self.default_fabric_env,
-            'task_name': task_name or 'stub',
-            'commands': commands or [],
-            'tasks_file': tasks_file or 'fabric_tasks.py',
-            'task_properties': task_properties or {},
-            'task_mapping': task_mapping or '',
-            'ip': ip or '',
-            'script_path': script_path or '',
-            'process': process or {}
-        }
-        blueprint_path = os.path.join(os.path.dirname(__file__),
-                                      'blueprint', 'blueprint.yaml')
-        self.env = local.init_env(blueprint_path,
-                                  name=self._testMethodName,
-                                  inputs=inputs)
-        self.env.execute('execute_operation',
-                         parameters={'operation': operation},
-                         task_retries=0)
-
+    def test_run_script(self):
+        self._execute('test.run_script',
+                      script_path='scripts/script.sh',
+                      process={
+                          'env': {
+                              'some_env_var': 'some_env_value',
+                              },
+                          'args': ['arg1_val', 'arg2_val', 'arg3_val'],
+                          'cwd': '/tmp',
+                          'work_dir': '/home/vagrant'
+                      })
 
 @workflow
 def execute_operation(operation, **kwargs):
