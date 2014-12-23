@@ -3,8 +3,8 @@ language: python
 python:
   - "2.7"
 env:
-#    - TOX_ENV=docs
-#    - TOX_ENV=flake8
+    - TOX_ENV=docs
+    - TOX_ENV=flake8
     - TOX_ENV=py27
 # TODO: add coveralls support
 install:
@@ -12,10 +12,6 @@ install:
     # - pip install coveralls
 script:
     - tox -e $TOX_ENV
-#    - cat ~/.ssh/authorized_keys
-#    - cat ~/.ssh/known_hosts
-#    - whoami
-#    - ssh localhost -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null
 # after_success:
 #     coveralls
 notifications:
