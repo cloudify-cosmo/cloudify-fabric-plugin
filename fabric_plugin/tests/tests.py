@@ -13,6 +13,7 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
+import json
 import os
 import unittest
 import contextlib
@@ -91,7 +92,8 @@ class BaseFabricPluginTest(unittest.TestCase):
                  bootstrap_context=None,
                  script_path=None,
                  process=None,
-                 ip=None):
+                 ip=None,
+                 custom_input='value'):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -105,7 +107,8 @@ class BaseFabricPluginTest(unittest.TestCase):
             'task_mapping': task_mapping or '',
             'ip': ip or '',
             'script_path': script_path or '',
-            'process': process or {}
+            'process': process or {},
+            'custom_input': custom_input
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
@@ -506,6 +509,41 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 }
             })
         self.assertEqual(return_value, 'content')
+
+    def test_run_script_inputs_as_env_variables(self):
+        def test(value):
+            return_value, _ = self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                custom_input=value,
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName
+                    }
+                })
+            self.assertEqual(return_value if isinstance(value, basestring)
+                             else json.loads(return_value), value)
+        test('string-value')
+        test([1, 2, 3])
+        test({'key': 'value'})
+
+    def test_run_script_inputs_as_env_variables_process_env_override(self):
+        def test_override(value):
+            return_value, _ = self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                custom_input='custom-input-value',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'custom_env_var': value
+                    }
+                })
+            self.assertEqual(return_value if isinstance(value, basestring)
+                             else json.loads(return_value), value)
+        test_override('string-value')
+        test_override([1, 2, 3])
+        test_override({'key': 'value'})
 
 
 @workflow
