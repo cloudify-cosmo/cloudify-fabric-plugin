@@ -15,6 +15,7 @@
 
 import os
 import importlib
+import json
 from StringIO import StringIO
 
 from six import exec_
@@ -104,7 +105,7 @@ def run_commands(commands, fabric_env=None, **kwargs):
 @operation
 def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
-    process = process or {}
+    process = _create_process_config(process, kwargs)
     base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
     ctx_server_port = process.get('ctx_server_port')
 
@@ -183,6 +184,18 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             return actual_ctx._return_value
         finally:
             proxy.close()
+
+
+def _create_process_config(process, operation_kwargs):
+    env_vars = operation_kwargs.copy()
+    if 'ctx' in env_vars:
+        del env_vars['ctx']
+    env_vars.update(process.get('env', {}))
+    for k, v in env_vars.items():
+        if isinstance(v, (dict, list, set)):
+            env_vars[k] = "'{0}'".format(json.dumps(v))
+    process['env'] = env_vars
+    return process
 
 
 def _get_task_from_mapping(mapping):

@@ -10,6 +10,8 @@ inputs:
     task_properties: {}
     task_mapping:    {}
     ip:              {}
+    custom_input:
+        default: value
 
 node_templates:
     test:
@@ -42,6 +44,7 @@ node_templates:
                         script_path:     { get_input: script_path }
                         process:         { get_input: process }
                         fabric_env:      { get_input: fabric_env }
+                        custom_env_var:  { get_input: custom_input }
 
 
 workflows:
