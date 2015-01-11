@@ -18,6 +18,8 @@ import os
 import unittest
 import contextlib
 import getpass
+from mock import patch
+from collections import namedtuple
 
 from fabric import api
 from fabric.contrib import files
@@ -31,6 +33,16 @@ from cloudify.endpoint import LocalEndpoint
 
 from fabric_plugin import tasks
 from cloudify import ctx
+
+
+def _mock_requests_get(url):
+    from fabric_plugin.tests import blueprint
+    path = url.split('http://localhost/')[1]
+    basedir = os.path.dirname(blueprint.__file__)
+    response = namedtuple('Response', 'text status_code')
+    with open(os.path.join(basedir, path)) as f:
+        response.text = f.read()
+    return response
 
 
 class BaseFabricPluginTest(unittest.TestCase):
@@ -380,6 +392,22 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                     'test_value': expected_runtime_property_value
                 },
             })
+        instance = self.env.storage.get_node_instances()[0]
+        self.assertEqual(expected_runtime_property_value,
+                         instance.runtime_properties['test_value'])
+
+    @patch('fabric_plugin.tasks.requests.get', _mock_requests_get)
+    def test_run_script_from_url(self):
+        expected_runtime_property_value = 'some_value'
+        _, env = self._execute(
+            'test.run_script',
+            script_path='http://localhost/scripts/script.sh',
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                    'test_value': expected_runtime_property_value
+                },
+                })
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(expected_runtime_property_value,
                          instance.runtime_properties['test_value'])

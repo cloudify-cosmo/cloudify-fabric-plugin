@@ -16,6 +16,8 @@
 import os
 import importlib
 import json
+import requests
+import tempfile
 from StringIO import StringIO
 
 from six import exec_
@@ -29,6 +31,7 @@ from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
+from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import exec_env
 
@@ -105,6 +108,8 @@ def run_commands(commands, fabric_env=None, **kwargs):
 @operation
 def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
+    if not process:
+        process = {}
     process = _create_process_config(process, kwargs)
     base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
     ctx_server_port = process.get('ctx_server_port')
@@ -112,7 +117,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
         proxy_client_path = proxy_client_path[:-1]
-    local_script_path = ctx.download_resource(script_path)
+    local_script_path = get_script(ctx.download_resource, script_path)
     base_script_path = os.path.basename(local_script_path)
     remote_ctx_dir = base_dir
     remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
@@ -184,6 +189,26 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             return actual_ctx._return_value
         finally:
             proxy.close()
+
+
+def get_script(download_resource_func, script_path):
+    split = script_path.split('://')
+    schema = split[0]
+    if schema in ['http', 'https']:
+        response = requests.get(script_path)
+        if response.status_code == 404:
+            raise NonRecoverableError('Failed downloading script: {0} ('
+                                      'status code: {1})'
+                                      .format(script_path,
+                                              response.status_code))
+        content = response.text
+        suffix = script_path.split('/')[-1]
+        script_path = tempfile.mktemp(suffix='-{0}'.format(suffix))
+        with open(script_path, 'w') as f:
+            f.write(content)
+        return script_path
+    else:
+        return download_resource_func(script_path)
 
 
 def _create_process_config(process, operation_kwargs):
