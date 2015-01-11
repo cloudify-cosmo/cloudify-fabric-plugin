@@ -4,6 +4,10 @@ test_run_script() {
     ctx instance runtime-properties test_value $test_value
 }
 
+test_run_script_from_url() {
+    ctx instance runtime-properties test_value $test_value
+}
+
 test_run_script_default_base_dir() {
     ctx instance runtime-properties work_dir $PWD
 }
