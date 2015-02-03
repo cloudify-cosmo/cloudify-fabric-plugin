@@ -204,7 +204,7 @@ def get_script(download_resource_func, script_path):
         content = response.text
         suffix = script_path.split('/')[-1]
         script_path = tempfile.mktemp(suffix='-{0}'.format(suffix))
-        with open(script_path, 'w') as f:
+        with open(script_path, 'wb') as f:
             f.write(content)
         return script_path
     else:
