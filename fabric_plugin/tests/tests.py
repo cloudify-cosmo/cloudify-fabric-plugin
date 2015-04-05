@@ -312,6 +312,14 @@ class FabricPluginTest(BaseFabricPluginTest):
         self.assertEqual('explicit_key_filename',
                          self.mock.settings_merged['key_filename'])
 
+    def test_env_var_key_filename(self):
+        with patch.dict(os.environ, {
+                tasks.CLOUDIFY_MANAGER_PRIVATE_KEY_PATH: 'env_key_filename'}):
+            self._execute('test.run_task',
+                          task_name='task')
+        self.assertEqual('env_key_filename',
+                         self.mock.settings_merged['key_filename'])
+
     def test_implicit_user(self):
         fabric_env = self.default_fabric_env.copy()
         del fabric_env['user']
