@@ -52,6 +52,11 @@ FABRIC_ENV_DEFAULTS = {
     'combine_stderr': True,
 }
 
+# Very low level workaround used to support manager recovery
+# that is executed on a client different than the one used
+# to bootstrap
+CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
+
 
 @operation
 def run_task(tasks_file, task_name, fabric_env=None,
@@ -301,7 +306,9 @@ class CredentialsHandler():
     def key_filename(self):
         """returns the ssh key to use when connecting to the remote host"""
         self.logger.debug('retrieving ssh key...')
-        if 'key_filename' not in self.fabric_env:
+        if CLOUDIFY_MANAGER_PRIVATE_KEY_PATH in os.environ:
+            key = os.environ[CLOUDIFY_MANAGER_PRIVATE_KEY_PATH]
+        elif 'key_filename' not in self.fabric_env:
             if self.ctx.bootstrap_context.cloudify_agent.agent_key_path:
                 key = self.ctx.bootstrap_context.cloudify_agent.agent_key_path
             else:
