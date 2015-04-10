@@ -4,4 +4,4 @@
 plugins:
     fabric:
         executor: central_deployment_agent
-        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.2rc.zip
+        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.2rc1.zip
