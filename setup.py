@@ -27,6 +27,6 @@ setup(
     install_requires=[
         'cloudify-plugins-common>=3.2rc1',
         'fabric==1.8.3',
-        'six==1.8.0',
+        'six>=1.8.0',
     ]
 )
