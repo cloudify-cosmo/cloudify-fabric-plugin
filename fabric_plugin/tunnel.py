@@ -32,7 +32,7 @@ def documented_contextmanager(func):
 
 
 @documented_contextmanager
-def remote(remote_port, local_port=None, local_host="localhost",
+def remote(remote_port, show_rtunnel, local_port=None, local_host="localhost",
            remote_bind_address="127.0.0.1"):
     """
     Create a tunnel forwarding a locally-visible port to the remote target.
@@ -59,8 +59,7 @@ def remote(remote_port, local_port=None, local_host="localhost",
     channels = []
     threads = []
 
-    def accept(channel, (src_addr, src_port), (dest_addr, dest_port),
-               show_rtunnel):
+    def accept(channel, (src_addr, src_port), (dest_addr, dest_port)):
         channels.append(channel)
         sock = socket.socket()
         sockets.append(sock)
