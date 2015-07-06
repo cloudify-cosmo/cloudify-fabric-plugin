@@ -190,8 +190,8 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             fabric_api.put(env_script, remote_env_script_path)
             with fabric_context.cd(cwd):
                 with tunnel.remote(proxy.port):
-                    fabric_api.run('source {0} && {1}'
-                                   .format(remote_env_script_path, command))
+                    fabric_api.run('source {0} && {1}'.format(
+                        remote_env_script_path, command))
             return actual_ctx._return_value
         finally:
             proxy.close()
