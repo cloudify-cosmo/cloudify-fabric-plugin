@@ -32,7 +32,7 @@ def documented_contextmanager(func):
 
 
 @documented_contextmanager
-def remote(remote_port, show_rtunnel, local_port=None, local_host="localhost",
+def remote(remote_port, local_port=None, local_host="localhost",
            remote_bind_address="127.0.0.1"):
     """
     Create a tunnel forwarding a locally-visible port to the remote target.
