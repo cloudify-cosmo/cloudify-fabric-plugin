@@ -22,7 +22,7 @@ from fabric import api as fabric_api
 from fabric.state import connections
 from fabric.thread_handling import ThreadHandler
 
-from cloudify.exceptions import RecoverableError
+from cloudify.exceptions import NonRecoverableError
 
 
 def documented_contextmanager(func):
@@ -67,7 +67,7 @@ def remote(remote_port, local_port=None, local_host="localhost",
         try:
             sock.connect((local_host, local_port))
         except Exception as e:
-            raise RecoverableError(
+            raise NonRecoverableError(
                 '[{0}] rtunnel: cannot connect to {1}:{2} ({3})'.format(
                     fabric_api.env.host_string, local_host,
                     local_port, e.message))
