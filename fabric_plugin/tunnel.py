@@ -32,7 +32,7 @@ def documented_contextmanager(func):
 
 
 @documented_contextmanager
-def remote(remote_port, show_rtunnel, local_port=None, local_host="localhost",
+def remote(remote_port, local_port=None, local_host="localhost",
            remote_bind_address="127.0.0.1"):
     """
     Create a tunnel forwarding a locally-visible port to the remote target.
@@ -74,13 +74,12 @@ def remote(remote_port, show_rtunnel, local_port=None, local_host="localhost",
             channel.close()
             return
 
-        if show_rtunnel:
-            ctx.logger.info('[{0}] rtunnel: opened reverse tunnel: '
-                            '{1} -> {2} -> {3}').format(
-                                fabric_api.env.host_string,
-                                channel.origin_addr,
-                                channel.getpeername(),
-                                (local_host, local_port))
+        ctx.logger.info('[{0}] rtunnel: opened reverse tunnel: '
+                        '{1} -> {2} -> {3}').format(
+                            fabric_api.env.host_string,
+                            channel.origin_addr,
+                            channel.getpeername(),
+                            (local_host, local_port))
 
         th = ThreadHandler('fwd', _forwarder, channel, sock)
         threads.append(th)
