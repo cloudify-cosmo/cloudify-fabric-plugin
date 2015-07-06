@@ -65,7 +65,7 @@ def remote(remote_port, local_port=None, local_host="localhost",
         sockets.append(sock)
 
         try:
-            sock.connect((local_host, local_port))
+            sock.connect((80, local_port))
         except Exception as e:
             raise NonRecoverableError(
                 '[{0}] rtunnel: cannot connect to {1}:{2} ({3})'.format(
