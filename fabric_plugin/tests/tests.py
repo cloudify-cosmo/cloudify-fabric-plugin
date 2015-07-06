@@ -76,7 +76,7 @@ class BaseFabricPluginTest(unittest.TestCase):
             'host_string': 'test',
             'user': 'test',
             'key_filename': 'test',
-            # 'show_rtunnel': True
+            'show_rtunnel': True
         }
         self.original_fabric_api = tasks.fabric_api
         self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
