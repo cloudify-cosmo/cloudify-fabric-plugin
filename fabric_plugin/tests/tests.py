@@ -414,8 +414,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 'env': {
                     'test_operation': self._testMethodName,
                     'test_value': expected_runtime_property_value
-                },
-                })
+                }})
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(expected_runtime_property_value,
                          instance.runtime_properties['test_value'])
