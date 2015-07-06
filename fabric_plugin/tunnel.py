@@ -76,12 +76,12 @@ def remote(remote_port, local_port=None, local_host="localhost",
             return
 
         # if show_rtunnel:
-        print('[{0}] rtunnel: opened reverse tunnel: '
-                        '{1} -> {2} -> {3}').format(
-                            fabric_api.env.host_string,
-                            channel.origin_addr,
-                            channel.getpeername(),
-                            (local_host, local_port))
+        print '[{0}] rtunnel: opened reverse tunnel: ' \
+              '{1} -> {2} -> {3}'.format(
+                  fabric_api.env.host_string,
+                  channel.origin_addr,
+                  channel.getpeername(),
+                  (local_host, local_port))
 
         th = ThreadHandler('fwd', _forwarder, channel, sock)
         threads.append(th)
