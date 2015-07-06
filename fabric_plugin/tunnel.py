@@ -14,6 +14,7 @@
 #    * limitations under the License.
 
 
+from contextlib import contextmanager
 import socket
 import select
 
@@ -24,6 +25,13 @@ from fabric.thread_handling import ThreadHandler
 from cloudify import ctx
 
 
+def documented_contextmanager(func):
+    wrapper = contextmanager(func)
+    wrapper.undecorated = func
+    return wrapper
+
+
+@documented_contextmanager
 def remote(remote_port, local_port=None, local_host="localhost",
            remote_bind_address="127.0.0.1"):
     """
