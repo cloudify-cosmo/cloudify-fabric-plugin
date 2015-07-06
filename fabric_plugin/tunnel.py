@@ -74,9 +74,8 @@ def remote(remote_port, local_port=None, local_host="localhost",
             channel.close()
             return
 
-        # if hasattr(fabric_api.env, 'show_rtunnel') \
-        #         and fabric_api.env.show_rtunnel:
-        if fabric_api.env.show_rtunnel:
+        if hasattr(fabric_api.env, 'show_rtunnel') \
+                and fabric_api.env.show_rtunnel:
             ctx.logger.info('[{0}] rtunnel: opened reverse tunnel: '
                             '{1} -> {2} -> {3}').format(
                                 fabric_api.env.host_string,
