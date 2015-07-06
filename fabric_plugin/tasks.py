@@ -39,6 +39,8 @@ from fabric_plugin import exec_env
 
 DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 
+SHOW_RTUNNEL = True
+
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
     'timeout': 10,
@@ -189,7 +191,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             fabric_api.put(local_script_path, remote_script_path)
             fabric_api.put(env_script, remote_env_script_path)
             with fabric_context.cd(cwd):
-                with tunnel.remote(proxy.port):
+                with tunnel.remote(proxy.port, show_rtunnel=SHOW_RTUNNEL):
                     fabric_api.run('source {0} && {1}'.format(
                         remote_env_script_path, command))
             return actual_ctx._return_value
@@ -360,7 +362,7 @@ def _fabric_env(fabric_env, warn_only):
         'key_filename': credentials.key_filename,
         'password': credentials.password,
         'warn_only': fabric_env.get('warn_only', warn_only),
-        'abort_exception': FabricTaskError
+        'abort_exception': FabricTaskError,
     })
     # validations
     if not (final_env.get('password') or final_env.get('key_filename')):

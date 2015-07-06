@@ -59,7 +59,8 @@ def remote(remote_port, local_port=None, local_host="localhost",
     channels = []
     threads = []
 
-    def accept(channel, (src_addr, src_port), (dest_addr, dest_port)):
+    def accept(channel, (src_addr, src_port), (dest_addr, dest_port),
+               show_rtunnel):
         channels.append(channel)
         sock = socket.socket()
         sockets.append(sock)
@@ -74,8 +75,7 @@ def remote(remote_port, local_port=None, local_host="localhost",
             channel.close()
             return
 
-        if hasattr(fabric_api.env, 'show_rtunnel') \
-                and fabric_api.env.show_rtunnel:
+        if show_rtunnel:
             ctx.logger.info('[{0}] rtunnel: opened reverse tunnel: '
                             '{1} -> {2} -> {3}').format(
                                 fabric_api.env.host_string,
