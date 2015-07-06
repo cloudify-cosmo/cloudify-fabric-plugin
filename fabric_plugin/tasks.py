@@ -39,7 +39,7 @@ from fabric_plugin import exec_env
 
 DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 
-SHOW_RTUNNEL = False
+SHOW_RTUNNEL = True
 
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
