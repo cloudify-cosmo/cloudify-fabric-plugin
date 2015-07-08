@@ -75,7 +75,7 @@ class BaseFabricPluginTest(unittest.TestCase):
         self.default_fabric_env = {
             'host_string': 'test',
             'user': 'test',
-            'key_filename': 'test'
+            'key_filename': 'test',
         }
         self.original_fabric_api = tasks.fabric_api
         self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
@@ -414,8 +414,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 'env': {
                     'test_operation': self._testMethodName,
                     'test_value': expected_runtime_property_value
-                },
-                })
+                }})
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(expected_runtime_property_value,
                          instance.runtime_properties['test_value'])
