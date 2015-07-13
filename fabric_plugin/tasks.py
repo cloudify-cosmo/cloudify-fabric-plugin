@@ -164,8 +164,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
         original_download_resource = actual_ctx.download_resource
 
         def download_resource(resource_path, target_path=None):
-            local_target_path = original_download_resource(resource_path,
-                                                           target_path)
+            local_target_path = original_download_resource(resource_path)
             if target_path:
                 remote_target_path = target_path
             else:
