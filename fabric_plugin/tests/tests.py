@@ -243,7 +243,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                                       'host_string': 'test'})
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn('key_filename or password', e.message)
+            self.assertIn('key_filename/key or password', e.message)
 
     def test_fabric_env_default_override(self):
         # first sanity for no override
@@ -311,6 +311,15 @@ class FabricPluginTest(BaseFabricPluginTest):
                       fabric_env=fabric_env)
         self.assertEqual('explicit_key_filename',
                          self.mock.settings_merged['key_filename'])
+
+    def test_explicit_key(self):
+        fabric_env = self.default_fabric_env.copy()
+        fabric_env['key'] = 'explicit_key_content'
+        self._execute('test.run_task',
+                      task_name='task',
+                      fabric_env=fabric_env)
+        self.assertEqual('explicit_key_content',
+                         self.mock.settings_merged['key'])
 
     def test_env_var_key_filename(self):
         with patch.dict(os.environ, {

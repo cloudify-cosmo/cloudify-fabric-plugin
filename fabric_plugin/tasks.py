@@ -303,6 +303,18 @@ class CredentialsHandler():
         return user
 
     @property
+    def key(self):
+        """returns the ssh key to use when connecting to the remote host"""
+        self.logger.debug('retrieving ssh key...')
+        if 'key' not in self.fabric_env:
+            key = None
+        else:
+            key = self.fabric_env['key']
+            # log only end of key
+            self.logger.debug('ssh user is: ...{0}'.format(key[-100:]))
+        return key
+
+    @property
     def key_filename(self):
         """returns the ssh key to use when connecting to the remote host"""
         self.logger.debug('retrieving ssh key...')
@@ -356,16 +368,27 @@ def _fabric_env(fabric_env, warn_only):
     final_env.update({
         'host_string': credentials.host_string,
         'user': credentials.user,
-        'key_filename': credentials.key_filename,
         'password': credentials.password,
         'warn_only': fabric_env.get('warn_only', warn_only),
         'abort_exception': FabricTaskError,
     })
+    if credentials.key:
+        final_env.update({
+            'key': credentials.key
+        })
+    else:
+        final_env.update({
+            'key_filename': credentials.key_filename
+        })
     # validations
-    if not (final_env.get('password') or final_env.get('key_filename')):
+    if not (
+        final_env.get('password') or
+        final_env.get('key_filename') or
+        final_env.get('key')
+    ):
         raise exceptions.NonRecoverableError(
             'access credentials not supplied '
-            '(you must supply at least one of key_filename or password)')
+            '(you must supply at least one of key_filename/key or password)')
     ctx.logger.info('environment prepared successfully')
     return final_env
 
