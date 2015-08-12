@@ -54,6 +54,10 @@ test_run_script_download_resource() {
     ctx returns $(cat $(ctx download-resource test_resource))
 }
 
+test_run_script_download_resource_and_render() {
+    ctx returns $(cat $(ctx download-resource-and-render test_resource_render))
+}
+
 test_run_script_download_resource_explicit_target_path() {
     ctx download-resource test_resource /tmp/hello
     ctx returns $(cat /tmp/hello)
