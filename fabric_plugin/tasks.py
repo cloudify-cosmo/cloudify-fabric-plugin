@@ -111,7 +111,7 @@ def run_commands(commands, fabric_env=None, **kwargs):
 
 
 @operation
-def run_script(script_path, fabric_env=None, process=None, **kwargs):
+def run_script(script_path, fabric_env=None, process=None, fail_hard=False, **kwargs):
 
     if not process:
         process = {}
@@ -191,6 +191,9 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
                     fabric_api.run('source {0} && {1}'
                                    .format(remote_env_script_path, command))
             return actual_ctx._return_value
+        except Exception as e:
+            cfy_e = NonRecoverableError() if fail_hard else e
+            raise cfy_e
         finally:
             proxy.close()
 
