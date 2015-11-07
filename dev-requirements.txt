@@ -1,4 +1,5 @@
-https://github.com/cloudify-cosmo/cloudify-dsl-parser/archive/3.3m7.zip
-https://github.com/cloudify-cosmo/cloudify-rest-client/archive/3.3m7.zip
-https://github.com/cloudify-cosmo/cloudify-plugins-common/archive/3.3m7.zip
+#https://github.com/cloudify-cosmo/cloudify-dsl-parser/archive/3.3m7.zip
+https://github.com/cloudify-cosmo/cloudify-dsl-parser/archive/3.4m3.zip
+https://github.com/cloudify-cosmo/cloudify-rest-client/archive/CFY-3691-Make-all-internal-REST-calls-secure.zip
+https://github.com/cloudify-cosmo/cloudify-plugins-common/archive/CFY-3691-Make-all-internal-REST-calls-secure.zip
 mock
