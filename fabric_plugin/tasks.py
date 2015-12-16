@@ -25,7 +25,7 @@ from fabric import api as fabric_api
 from fabric import context_managers as fabric_context
 from fabric.contrib import files as fabric_files
 
-import tunnel
+from cloudify import utils
 from cloudify import ctx
 from cloudify import exceptions
 from cloudify.decorators import operation
@@ -34,6 +34,7 @@ from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
 
+from fabric_plugin import tunnel
 from fabric_plugin import exec_env
 
 
@@ -129,10 +130,12 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
     remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
     remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
     remote_work_dir = '{0}/work'.format(remote_ctx_dir)
+    remote_path_suffix = '{0}-{1}'.format(base_script_path,
+                                          utils.id_generator(size=8))
     remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
-                                                  base_script_path)
+                                                  remote_path_suffix)
     remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
-                                          base_script_path)
+                                          remote_path_suffix)
 
     env = process.get('env', {})
     cwd = process.get('cwd', remote_work_dir)
@@ -146,7 +149,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
         command = ' '.join([command] + args)
 
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
-        if not fabric_files.exists(remote_ctx_dir):
+        if not fabric_files.exists(remote_ctx_path):
             # there may be race conditions with other operations that
             # may be running in parallel, so we pass -p to make sure
             # we get 0 exit code if the directory already exists
