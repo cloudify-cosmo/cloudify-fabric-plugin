@@ -43,7 +43,7 @@ DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
     'timeout': 10,
-    'forward_agent': True,
+    'forward_agent': False,
     'abort_on_prompts': True,
     'keepalive': 0,
     'linewise': False,
