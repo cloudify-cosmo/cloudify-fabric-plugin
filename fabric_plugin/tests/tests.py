@@ -382,15 +382,23 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
         self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
-        if getpass.getuser() != 'travis':
+        user = getpass.getuser()
+        if user not in ['ubuntu', 'travis']:
             raise unittest.SkipTest()
 
         super(FabricPluginRealSSHTests, self).setUp()
-        self.default_fabric_env = {
-            'host_string': 'localhost',
-            'user': 'travis',
-            'password': 'travis'
-        }
+        if user == 'travis':
+            self.default_fabric_env = {
+                'host_string': 'localhost',
+                'user': 'travis',
+                'password': 'travis'
+            }
+        if user == 'ubuntu':
+            self.default_fabric_env = {
+                'host_string': 'localhost',
+                'user': 'ubuntu',
+                'key_filename': '/home/ubuntu/.ssh/build_key.rsa'
+            }
         tasks.fabric_api = self.original_fabric_api
         with context_managers.settings(**self.default_fabric_env):
             if files.exists(tasks.DEFAULT_BASE_DIR):
