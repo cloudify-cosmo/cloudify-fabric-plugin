@@ -38,6 +38,45 @@ test_run_script_return_value() {
     ctx returns $return_value
 }
 
+test_crash_abort_after_return() {
+    ctx returns $return_value
+    ctx abort_operation 'should not raise an exception'
+}
+
+test_run_script_abort() {
+    ctx abort_operation "$error_msg"
+}
+
+test_crash_return_after_abort() {
+    # don't abort script on error intentionally
+    set +e
+    ctx abort_operation "$error_msg"
+    ctx returns 'should_not_return_this'
+}
+
+test_imported_ctx_retry_operation() {
+    . ctx-sh
+    ctx retry_operation "$error_msg" 2> $output_file
+    echo "this line shouldn't execute" > $output_file
+}
+
+test_imported_ctx_abort_operation() {
+    . ctx-sh
+    ctx abort_operation "$error_msg" 2> $output_file
+    echo "this line shouldn't execute" > $output_file
+}
+
+test_abort_returns_nonzero_exit_code() {
+    set -e
+    ctx abort_operation "$error_msg" 2> $output_file
+    echo "this line shouldn't execute" > $output_file
+}
+
+test_abort_and_script_exits_elsewhere_with_nonzero_exit_code() {
+    ctx abort_operation "$error_msg"
+    exit 1
+}
+
 test_run_script_inputs_as_env_variables() {
     ctx returns "$custom_env_var"
 }

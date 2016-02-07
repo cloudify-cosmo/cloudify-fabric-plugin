@@ -18,6 +18,7 @@ import os
 import unittest
 import contextlib
 import getpass
+import tempfile
 from mock import patch
 from collections import namedtuple
 
@@ -25,7 +26,8 @@ from fabric import api
 from fabric.contrib import files
 from fabric import context_managers
 
-from cloudify.exceptions import NonRecoverableError
+from cloudify.exceptions import (NonRecoverableError,
+                                 RecoverableError)
 from cloudify.workflows import local
 from cloudify.workflows import ctx as workflow_ctx
 from cloudify.decorators import workflow
@@ -129,6 +131,7 @@ class BaseFabricPluginTest(unittest.TestCase):
                                   inputs=inputs)
         result = self.env.execute('execute_operation',
                                   parameters={'operation': operation},
+                                  task_retry_interval=0,
                                   task_retries=0)
         return result, self.env
 
@@ -387,6 +390,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
             raise unittest.SkipTest()
 
         super(FabricPluginRealSSHTests, self).setUp()
+        user = getpass.getuser()
         if user == 'travis':
             self.default_fabric_env = {
                 'host_string': 'localhost',
@@ -533,9 +537,156 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                     'test_operation': self._testMethodName,
                     'return_value': expected_return_value
                 },
-                'command_prefix': 'dash'
-            })
+                'command_prefix': 'bash'
+            },
+        )
         self.assertEqual(return_value, expected_return_value)
+
+    def test_imported_ctx_retry_operation(self):
+        from datetime import datetime
+        error_msg = 'oops_try_again!'
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        output_file_path = \
+            '/tmp/{0}-{1}.log'.format(self._testMethodName, timestamp)
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg,
+                        'output_file': output_file_path
+                    }
+                })
+            self.fail('expected to raise an exception')
+        except RecoverableError, e:
+            self.assertEquals(error_msg, e.message)
+            # verify that ctx outputs error message to stderr
+            _, output_local_copy_path = tempfile.mkstemp()
+            with context_managers.settings(**self.default_fabric_env):
+                api.get(remote_path=output_file_path,
+                        local_path=output_local_copy_path)
+                with open(output_local_copy_path, 'r') as output_file:
+                    self.assertEquals(error_msg, output_file.read().strip())
+
+    def test_imported_ctx_abort_operation(self):
+        from datetime import datetime
+        error_msg = 'a_terrible_error_abortion!'
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        output_file_path = \
+            '/tmp/{0}-{1}.log'.format(self._testMethodName, timestamp)
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg,
+                        'output_file': output_file_path
+                    }
+                })
+            self.fail('expected to raise an exception')
+        except NonRecoverableError, e:
+            self.assertEquals(error_msg, e.message)
+            # verify that ctx outputs error message to stderr
+            _, output_local_copy_path = tempfile.mkstemp()
+            with context_managers.settings(**self.default_fabric_env):
+                api.get(remote_path=output_file_path,
+                        local_path=output_local_copy_path)
+                with open(output_local_copy_path, 'r') as output_file:
+                    self.assertEquals(error_msg, output_file.read().strip())
+
+    def test_crash_abort_after_return(self):
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'return_value': 'some_value'
+                    }
+                })
+        except NonRecoverableError, e:
+            self.assertEquals('ctx may only abort or return once', e.message)
+
+    def test_crash_return_after_abort(self):
+        error_msg = 'oops_we_got_an_error'
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg
+                    }
+                })
+            self.fail('expected to raise an exception')
+        except NonRecoverableError, e:
+            self.assertEquals('ctx may only abort or return once', e.message)
+
+    def test_run_script_abort(self):
+        error_msg = 'oops_we_got_an_error'
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg
+                    },
+                })
+            self.fail('expected to raise an exception')
+        except NonRecoverableError, e:
+            self.assertEquals(error_msg, e.message)
+
+    def test_abort_returns_nonzero_exit_code(self):
+        from datetime import datetime
+        error_msg = 'oops_we_got_an_error'
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        output_file_path = \
+            '/tmp/{0}-{1}.log'.format(self._testMethodName, timestamp)
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg,
+                        'output_file': output_file_path
+                    }
+                })
+            self.fail('expected to raise an exception')
+        except NonRecoverableError, e:
+            self.assertEquals(error_msg, e.message)
+            # verify that ctx outputs error message to stderr
+            _, output_local_copy_path = tempfile.mkstemp()
+            with context_managers.settings(**self.default_fabric_env):
+                api.get(remote_path=output_file_path,
+                        local_path=output_local_copy_path)
+                with open(output_local_copy_path, 'r') as output_file:
+                    self.assertEquals(error_msg, output_file.read().strip())
+
+    def test_abort_and_script_exits_elsewhere_with_nonzero_exit_code(self):
+        error_msg = 'oops_we_got_an_error'
+        try:
+            self._execute(
+                'test.run_script',
+                script_path='scripts/script.sh',
+                process={
+                    'env': {
+                        'test_operation': self._testMethodName,
+                        'error_msg': error_msg
+                    }
+                })
+            self.fail('expected to raise an exception')
+        except NonRecoverableError, e:
+            self.assertEquals(error_msg, e.message)
 
     def test_run_script_ctx_server_port(self):
         from cloudify.proxy import server

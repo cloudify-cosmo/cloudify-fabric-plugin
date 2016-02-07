@@ -14,6 +14,7 @@
 #    * limitations under the License.
 
 import os
+import sys
 import importlib
 import json
 import requests
@@ -37,6 +38,13 @@ from cloudify.exceptions import NonRecoverableError
 from fabric_plugin import tunnel
 from fabric_plugin import exec_env
 
+try:
+    from cloudify.proxy.client import ScriptException
+except ImportError:
+    raise NonRecoverableError(
+        'cloudify-fabric-plugin requires a newer version of '
+        'cloudify-plugins-common'
+    )
 
 DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 
@@ -124,10 +132,13 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
         proxy_client_path = proxy_client_path[:-1]
+    local_ctx_sh_path = os.path.join(_get_bin_dir(),
+                                     'ctx-sh')
     local_script_path = get_script(ctx.download_resource, script_path)
     base_script_path = os.path.basename(local_script_path)
     remote_ctx_dir = base_dir
     remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
+    remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
     remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
     remote_work_dir = '{0}/work'.format(remote_ctx_dir)
     remote_path_suffix = '{0}-{1}'.format(base_script_path,
@@ -149,21 +160,53 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
         command = ' '.join([command] + args)
 
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+        # the remote host must have ctx and any related files before
+        # running any fabric scripts
         if not fabric_files.exists(remote_ctx_path):
+
             # there may be race conditions with other operations that
             # may be running in parallel, so we pass -p to make sure
             # we get 0 exit code if the directory already exists
             fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
             fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
+
+            # this file has to be present before using ctx
+            fabric_api.put(local_ctx_sh_path, remote_ctx_sh_path)
+
             fabric_api.put(proxy_client_path, remote_ctx_path)
 
         actual_ctx = ctx._get_current_object()
 
+        def abort_operation(message=None):
+            if actual_ctx._return_value is not None:
+                actual_ctx._return_value = \
+                    RuntimeError('ctx may only abort or return once')
+                raise actual_ctx._return_value
+            actual_ctx._return_value = ScriptException(message)
+            return actual_ctx._return_value
+
+        def retry_operation(message=None, retry_after=None):
+            if actual_ctx._return_value is not None:
+                actual_ctx._return_value = \
+                    RuntimeError('ctx may only abort or return once')
+                raise actual_ctx._return_value
+            actual_ctx.operation.retry(message=message,
+                                       retry_after=retry_after)
+            actual_ctx._return_value = ScriptException(message, retry=True)
+            return actual_ctx._return_value
+
+        actual_ctx.abort_operation = abort_operation
+        actual_ctx.retry_operation = retry_operation
+
         def returns(_value):
+            if actual_ctx._return_value is not None:
+                actual_ctx._return_value = \
+                    RuntimeError('ctx may only abort or return once')
+                raise actual_ctx._return_value
             actual_ctx._return_value = _value
-        actual_ctx._return_value = None
         actual_ctx.returns = returns
 
+        actual_ctx._return_value = None
         original_download_resource = actual_ctx.download_resource
 
         def download_resource(resource_path, target_path=None):
@@ -196,6 +239,22 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             fabric_api.put(local_target_path, remote_target_path)
             return remote_target_path
 
+        def handle_script_result(script_result):
+            if isinstance(script_result, ScriptException):
+                if script_result.retry:
+                    return script_result
+                else:
+                    raise NonRecoverableError(str(script_result))
+            # this happens when more than 1 ctx proxy cmd is used
+            elif isinstance(script_result, RuntimeError):
+                raise NonRecoverableError(str(script_result))
+            # determine if this code runs during exception handling
+            current_exception = sys.exc_info()[1]
+            if current_exception:
+                raise
+            else:
+                return script_result
+
         proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
 
         env_script = StringIO()
@@ -210,9 +269,12 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             fabric_api.put(env_script, remote_env_script_path)
             with fabric_context.cd(cwd):
                 with tunnel.remote(proxy.port):
-                    fabric_api.run('source {0} && {1}'.format(
-                        remote_env_script_path, command))
-            return actual_ctx._return_value
+                    try:
+                        fabric_api.run('source {0} && {1}'.format(
+                            remote_env_script_path, command))
+                    except FabricTaskError:
+                        return handle_script_result(actual_ctx._return_value)
+            return handle_script_result(actual_ctx._return_value)
         finally:
             proxy.close()
 
@@ -235,6 +297,13 @@ def get_script(download_resource_func, script_path):
         return script_path
     else:
         return download_resource_func(script_path)
+
+
+def _get_bin_dir():
+    bin_dir = os.path.dirname(sys.executable)
+    if os.name == 'nt' and 'scripts' != os.path.basename(bin_dir).lower():
+        bin_dir = os.path.join(bin_dir, 'scripts')
+    return bin_dir
 
 
 def _create_process_config(process, operation_kwargs):
