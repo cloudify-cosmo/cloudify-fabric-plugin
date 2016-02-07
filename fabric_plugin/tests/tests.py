@@ -34,6 +34,7 @@ from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
 
 from fabric_plugin import tasks
+from fabric_plugin.tasks import ILLEGAL_CTX_OPERATION_ERROR
 from cloudify import ctx
 
 
@@ -403,6 +404,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 'user': 'ubuntu',
                 'key_filename': '/home/ubuntu/.ssh/build_key.rsa'
             }
+
         tasks.fabric_api = self.original_fabric_api
         with context_managers.settings(**self.default_fabric_env):
             if files.exists(tasks.DEFAULT_BASE_DIR):
@@ -610,7 +612,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                     }
                 })
         except NonRecoverableError, e:
-            self.assertEquals('ctx may only abort or return once', e.message)
+            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), e.message)
 
     def test_crash_return_after_abort(self):
         error_msg = 'oops_we_got_an_error'
@@ -626,7 +628,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError, e:
-            self.assertEquals('ctx may only abort or return once', e.message)
+            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), e.message)
 
     def test_run_script_abort(self):
         error_msg = 'oops_we_got_an_error'
