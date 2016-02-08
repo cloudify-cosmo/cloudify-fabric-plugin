@@ -41,10 +41,13 @@ from fabric_plugin import exec_env
 try:
     from cloudify.proxy.client import ScriptException
 except ImportError:
-    raise NonRecoverableError(
-        'cloudify-fabric-plugin requires a newer version of '
-        'cloudify-plugins-common'
-    )
+    ScriptException = None
+
+
+ILLEGAL_CTX_OPERATION_ERROR = RuntimeError('ctx may only abort or return once')
+UNSUPPORTED_SCRIPT_FEATURE_ERROR = \
+    RuntimeError('ctx abort & retry commands are only supported in Cloudify '
+                 '3.4 or later')
 
 DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
 
@@ -177,22 +180,30 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
         actual_ctx = ctx._get_current_object()
 
+        actual_ctx.is_script_exception_defined = ScriptException is not None
+
         def abort_operation(message=None):
             if actual_ctx._return_value is not None:
-                actual_ctx._return_value = \
-                    RuntimeError('ctx may only abort or return once')
+                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
                 raise actual_ctx._return_value
-            actual_ctx._return_value = ScriptException(message)
+            if actual_ctx.is_script_exception_defined:
+                actual_ctx._return_value = ScriptException(message)
+            else:
+                actual_ctx._return_value = UNSUPPORTED_SCRIPT_FEATURE_ERROR
+                raise actual_ctx
             return actual_ctx._return_value
 
         def retry_operation(message=None, retry_after=None):
             if actual_ctx._return_value is not None:
-                actual_ctx._return_value = \
-                    RuntimeError('ctx may only abort or return once')
+                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
                 raise actual_ctx._return_value
             actual_ctx.operation.retry(message=message,
                                        retry_after=retry_after)
-            actual_ctx._return_value = ScriptException(message, retry=True)
+            if actual_ctx.is_script_exception_defined:
+                actual_ctx._return_value = ScriptException(message, retry=True)
+            else:
+                actual_ctx._return_value = UNSUPPORTED_SCRIPT_FEATURE_ERROR
+                raise actual_ctx._return_value
             return actual_ctx._return_value
 
         actual_ctx.abort_operation = abort_operation
@@ -200,8 +211,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
         def returns(_value):
             if actual_ctx._return_value is not None:
-                actual_ctx._return_value = \
-                    RuntimeError('ctx may only abort or return once')
+                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
                 raise actual_ctx._return_value
             actual_ctx._return_value = _value
         actual_ctx.returns = returns
@@ -240,12 +250,14 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             return remote_target_path
 
         def handle_script_result(script_result):
-            if isinstance(script_result, ScriptException):
+            if (actual_ctx.is_script_exception_defined and
+               isinstance(script_result, ScriptException)):
                 if script_result.retry:
                     return script_result
                 else:
                     raise NonRecoverableError(str(script_result))
-            # this happens when more than 1 ctx proxy cmd is used
+            # this happens when more than 1 ctx operation is invoked or
+            # the plugin runs an unsupported feature on older Cloudify
             elif isinstance(script_result, RuntimeError):
                 raise NonRecoverableError(str(script_result))
             # determine if this code runs during exception handling
