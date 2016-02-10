@@ -276,6 +276,9 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             env_script.write('export {0}={1}\n'.format(key, value))
         env_script.write('chmod +x {0}\n'.format(remote_script_path))
         env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
+        # invoke sys.exc_clear() because handle_script_result
+        # invokes sys.exc_info()
+        sys.exc_clear()
         try:
             fabric_api.put(local_script_path, remote_script_path)
             fabric_api.put(env_script, remote_env_script_path)
