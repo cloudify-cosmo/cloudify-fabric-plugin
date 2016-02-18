@@ -76,3 +76,8 @@ coverage.xml
 
 # QuickBuild
 .qbcache/
+
+
+winrm-plugin/example-script/
+winrm-plugin/VARS_IN_BP
+winrm-plugin/blueprint_test/
