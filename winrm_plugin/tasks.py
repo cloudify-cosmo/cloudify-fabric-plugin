@@ -1,6 +1,7 @@
 # standard library imports
 import base64
 import os.path
+import sys
 
 # installed libraries imports
 import winrm
@@ -8,6 +9,7 @@ import winrm
 # our library imports
 from cloudify import ctx
 from cloudify.decorators import operation
+from cloudify.exceptions import NonRecoverableError
 
 
 @operation
@@ -70,7 +72,12 @@ def get_conn(winrm_protocol, address, password, username, winrm_port):
 
 
 def get_remote_shell_id(conn):
-    return conn.open_shell()
+    try:
+        return conn.open_shell()
+    except winrm.exceptions.UnauthorizedError as remote_shell_error:
+        raise NonRecoverableError('Can\'t create connection.'
+                                  '({0})').format(str(remote_shell_error))
+        sys.exit()
 
 
 def create_script_creation_command(local_file_path, powershell_path,
