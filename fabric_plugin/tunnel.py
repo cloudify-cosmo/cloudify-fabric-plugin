@@ -27,8 +27,8 @@ def remote(remote_port, local_port=None, local_host="localhost",
     """
     Create a tunnel forwarding a locally-visible port to the remote target.
     """
-    if local_port is None:
-        local_port = remote_port
+
+    local_port = generate_local_port(remote_port, local_port)
 
     sockets = []
     channels = []
@@ -54,7 +54,7 @@ def remote(remote_port, local_port=None, local_host="localhost",
 
     transport = connections[fabric_api.env.host_string].get_transport()
     transport.request_port_forward(
-        remote_bind_address, remote_port, handler=accept)
+        remote_bind_address, local_port, handler=accept)
 
     try:
         yield
@@ -83,3 +83,16 @@ def _forwarder(chan, sock):
             sock.send(data)
     chan.close()
     sock.close()
+
+
+def generate_local_port(remote_port, local_port):
+    # generating local port referring to
+    # a given remote port in order to avoid TCP Forward exception.
+    if not local_port or local_port == remote_port:
+        local_port = remote_port+100
+    if local_port > 65535:
+        local_port = remote_port+1
+        if local_port > 65535:
+            raise ValueError('Error: local port is not valid!')
+
+    return local_port
