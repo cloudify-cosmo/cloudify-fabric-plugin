@@ -22,14 +22,11 @@ def documented_contextmanager(func):
 
 
 @documented_contextmanager
-def remote(remote_port, local_port=None, local_host="localhost",
+def remote(local_port, remote_port=0, local_host="localhost",
            remote_bind_address="127.0.0.1"):
     """
     Create a tunnel forwarding a locally-visible port to the remote target.
     """
-    if local_port is None:
-        local_port = remote_port
-
     sockets = []
     channels = []
     threads = []
@@ -42,22 +39,27 @@ def remote(remote_port, local_port=None, local_host="localhost",
         try:
             sock.connect((local_host, local_port))
         except Exception as e:
+            try:
+                channel.close()
+            except Exception as e2:
+                close_error = ' (While trying to close channel: {0})'.format(
+                    e2)
+            else:
+                close_error = ''
             raise NonRecoverableError(
-                '[{0}] rtunnel: cannot connect to {1}:{2} ({3})'.format(
+                '[{0}] rtunnel: cannot connect to {1}:{2} ({3}){4}'.format(
                     fabric_api.env.host_string, local_host,
-                    local_port, e.message))
-            channel.close()
-            return
+                    local_port, e, close_error))
 
         th = ThreadHandler('fwd', _forwarder, channel, sock)
         threads.append(th)
 
     transport = connections[fabric_api.env.host_string].get_transport()
-    transport.request_port_forward(
+    remote_port = transport.request_port_forward(
         remote_bind_address, remote_port, handler=accept)
 
     try:
-        yield
+        yield remote_port
     finally:
         for sock, chan, th in zip(sockets, channels, threads):
             sock.close()
