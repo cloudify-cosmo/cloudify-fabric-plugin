@@ -86,7 +86,7 @@ test_run_script_inputs_as_env_variables_process_env_override() {
 }
 
 test_run_script_ctx_server_port() {
-    ctx returns $CTX_SOCKET_URL
+    ctx returns $LOCAL_CTX_SOCKET_URL
 }
 
 test_run_script_download_resource() {
