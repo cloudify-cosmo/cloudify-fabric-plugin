@@ -1,0 +1,19 @@
+#AWS inputs
+aws_config:
+  aws_access_key_id: ''
+  aws_secret_access_key: ''
+active_directory_port: 389
+image_id: ami-3586ac5f
+instance_type: m3.medium
+
+# script inputs + command inputs
+local_file_path: ../example-script/script.sp1
+delete_after_running: false
+remote_script_path: c:\users\Administrator\desktop
+
+# command inputs
+username: Administrator
+password: Aa123456!
+process: powershell
+winrm_port: 5985
+winrm_protocol: http
