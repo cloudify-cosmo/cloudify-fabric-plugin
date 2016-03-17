@@ -3,8 +3,8 @@ import sys
 
 def write():
     try:
-        file =with  open('c:\\users\\administrator\\desktop\\python-succes.txt',
-                    'a')
+        file =with open('c:\\users\\administrator\\desktop\\python-succes.txt',
+                        'a')
         file.wirte('success!!')
     except:
         print('Something went wrong! Can\'t tell what?')
