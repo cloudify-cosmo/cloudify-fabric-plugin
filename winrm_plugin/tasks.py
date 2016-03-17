@@ -10,12 +10,14 @@ import winrm
 from cloudify import ctx
 from cloudify.decorators import operation
 from cloudify.exceptions import NonRecoverableError
+from cloudify.exceptions import RecoverableError
 
 
 @operation
 def run_script(address, username, password, process, local_file_path,
                delete_after_running=True, remote_script_path=None,
                winrm_port=5985, winrm_protocol="http", **kwargs):
+    file_ext=os.path.splitext(local_file_path)[1]
 
     remote_script_file_name = "\\script" + os.path.splitext(local_file_path)[1]
 
@@ -29,27 +31,29 @@ def run_script(address, username, password, process, local_file_path,
             local_file_path, powershell_path, remote_script_file_name)
 
     cmd_path = define_script_path(remote_script_path)
+    check_procces_and_ext(file_ext, process)
+
     path_check = check_remote_path(remote_shell_id, cmd_path, conn)
 
     if path_check:
         # copy the script file
-        print 'Copying script file on remote machine'
+        ctx.logger.info ('Copying script file on remote machine')
         run_remote_command(remote_shell_id, 'powershell', '-encodedcommand',
                            ' {0}'.format(encoded_script), conn)
 
         process = define_process_var(process)
 
-        print 'Running the script on remote machine'
+        ctx.logger.info ('Running the script on remote machine')
         run_remote_command(remote_shell_id, process, cmd_path,
                            remote_script_file_name, conn)
 
         if delete_after_running:
-            print 'Removing script file from remote machine'
+            ctx.logger.info ('Removing script file from remote machine')
             run_remote_command(remote_shell_id, 'del', cmd_path,
                                remote_script_file_name, conn)
     else:
-        raise NonRecoverableError('Path {0} is not exist'\
-            .format(remote_script_path))
+        raise NonRecoverableError('Path {0} or {1} does not exist'\
+                                  .format(cmd_path, powershell_path))
 
 @operation
 def run_commands(commands, address, username, password,
@@ -82,16 +86,17 @@ def get_conn(winrm_protocol, address, password, username, winrm_port):
 
 
 def get_remote_shell_id(conn):
-
     try:
         return conn.open_shell()
-    except (winrm.exceptions.WinRMAuthorizationError,
-            winrm.exceptions.WinRMTransportError,
-            winrm.exceptions.WinRMWebServiceError,
+    except (winrm.exceptions.WinRMWebServiceError,
             winrm.exceptions.TimeoutError,
+            winrm.exceptions.WinRMAuthorizationError,
             winrm.exceptions.UnauthorizedError) as remote_shell_error:
-        ctx.logger.info('Can\'t create connection. Error: '
-                        '({0})'.format(str(remote_shell_error)))
+        raise NonRecoverableError('Can\'t create connection. Error: '
+                                  '({0})'.format(str(remote_shell_error)))
+    except (winrm.exceptions.WinRMTransportError) as remote_shell_error:
+       raise RecoverableError('Can\'t create connection. Error: '
+                              '({0})'.format(str(remote_shell_error)))
 
 
 def create_script_creation_command(local_file_path, powershell_path,
@@ -124,10 +129,12 @@ def create_encoded_command(command):
          raise NonRecoverableError('command var is None. Error: '
                                    '{0}'.format(str(encoded_command_error)))
 
+
 def define_process_var(process):
 
     process = process.lower()
     return process if process !='cmd' else ' '
+
 
 def run_remote_command(remote_shell_id, process, cmd_path,
                        remote_script_file_name, conn):
@@ -141,13 +148,13 @@ def run_remote_command(remote_shell_id, process, cmd_path,
         if stdout:
             ctx.logger.info('STDOUT: {0}'.format(stdout))
         if stderr:
-            ctx.logger.info('STDERR: {0}'.format(stderr))
+            ctx.logger.error('STDERR: {0}'.format(stderr))
     except winrm.exceptions.WinRMTransportError as remote_run_error:
-        ctx.logger.info('Can\'t run remote command. Error: '
+        ctx.logger.error('Can\'t run remote command. Error: '
                         '({0})'.format(str(remote_run_error)))
 
-def check_remote_path(remote_shell_id, cmd_path, conn):
 
+def check_remote_path(remote_shell_id, cmd_path, conn):
     try:
         command_id = conn.run_command(remote_shell_id,
                                      'IF EXIST {0} (ECHO 1) '
@@ -157,5 +164,19 @@ def check_remote_path(remote_shell_id, cmd_path, conn):
         conn.cleanup_command(remote_shell_id, command_id)
         return True if int(stdout) == 1 else False
     except winrm.exceptions.WinRMTransportError as remote_run_error:
-        ctx.logger.info('Can\'t run remote command. Error: '
-                        '({0})'.format(str(remote_run_error)))
+        raise RecoverableError('Can\'t run remote command. Error: '
+                                  '({0})'.format(str(remote_run_error)))
+
+
+def check_procces_and_ext(file_ext, process):
+    process = process.lower()
+    file_ext = file_ext.lower()
+    powershell = True if process == 'powershell' and file_ext == '.ps1' \
+        else False
+    python = True if process == 'python' and file_ext == '.py' else False
+    cmd = True if process == 'cmd' and file_ext == '.bat' else False
+    if powershell or python or cmd:
+        return True
+    else:
+        raise NonRecoverableError('procces: {0} can\'t run {1} files.'\
+                                  .format(process, file_ext))
