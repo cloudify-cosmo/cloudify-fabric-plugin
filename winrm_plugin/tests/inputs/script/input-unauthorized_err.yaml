@@ -7,7 +7,7 @@ image_id: ami-3586ac5f
 instance_type: m3.medium
 
 # script inputs + command inputs
-local_file_path: ../example-script/script.sp1
+local_file_path: /home/haviv/cloudify-cosmo/cloudify-fabric-plugin/winrm_plugin/tests/example-script/script.ps1
 delete_after_running: false
 remote_script_path: c:\users\Administrator\desktop
 
