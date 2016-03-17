@@ -2,7 +2,7 @@ tosca_definitions_version: cloudify_dsl_1_2
 
 description: >
   This blueprint defines an EC2 VM created using Cloudify's AWS plugin
-  and a simple web server started using Cloudify's script plugin.
+  and a simple web server started using Cloudify's winrm plugin.
   In addition, an elastic IP and a security group are created and associated with the created VM.
 
 imports:
@@ -13,15 +13,12 @@ imports:
 
 inputs:
 
-  active_directory_port:
-    description: The active directory server port
-    default: 389
-
-  image_id: 
+  image_id:
     description: AWS EC2 image id to use for the server
     default: 'ami-3586ac5f'
 
   aws_config:
+    description: aws_access_key_id & aws_secret_access_key
 
   instance_type:
     description: AWS EC2 instance type to use for the server
@@ -57,12 +54,8 @@ node_templates:
     type: cloudify.aws.nodes.SecurityGroup
     properties:
       aws_config: { get_input: aws_config }
-      description: Security group for active directory test VM
+      description: Security group for winrm test VM
       rules:
-        - ip_protocol: tcp
-          cidr_ip: 0.0.0.0/0
-          from_port: { get_property: [ active_directory_server, port ] }
-          to_port: { get_property: [ active_directory_server, port ] }
         - ip_protocol: tcp
           cidr_ip: 0.0.0.0/0
           from_port: 5985
@@ -97,10 +90,10 @@ node_templates:
       - type: cloudify.aws.relationships.instance_connected_to_security_group
         target: security_groups
 
-  active_directory_server:
+  winrm_plugin:
     type: cloudify.nodes.WebServer
     properties:
-      port: { get_input: active_directory_port }
+      port: { get_input: winrm_port }
     relationships:
       - type: cloudify.relationships.contained_in
         target: vm
@@ -116,11 +109,3 @@ node_templates:
                 winrm_port: { get_input: winrm_port }
                 winrm_protocol: { get_input: winrm_protocol }
                 commands: {get_input: commands}
-
-
-outputs:
-  ldap_endpoint:
-    description: The active directory's external endpoint
-    value: { concat: ['ldap://', { get_attribute: [elastic_ip, aws_resource_id] },
-                      ':', { get_property: [active_directory_server, port] }] }
-
