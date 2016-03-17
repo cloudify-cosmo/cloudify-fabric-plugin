@@ -115,9 +115,8 @@ node_templates:
                 process: { get_input: process}
                 winrm_port: { get_input: winrm_port }
                 winrm_protocol: { get_input: winrm_protocol }
-                commands:
-                  - ipconfig
-                  - dir
+                commands: {get_input: commands}
+
 
 outputs:
   ldap_endpoint:
