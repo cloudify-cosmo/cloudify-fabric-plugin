@@ -11,7 +11,7 @@ delete_after_running: false
 remote_script_path: c:\users\Administrator\desktop
 
 # command inputs
-username: root
+username: Administrator
 password: Aa123456!
 process: python
 winrm_port: 5985
