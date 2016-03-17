@@ -17,7 +17,7 @@ from cloudify.exceptions import RecoverableError
 def run_script(address, username, password, process, local_file_path,
                delete_after_running=True, remote_script_path=None,
                winrm_port=5985, winrm_protocol="http", **kwargs):
-    file_ext=os.path.splitext(local_file_path)[1]
+    file_ext = os.path.splitext(local_file_path)[1]
 
     remote_script_file_name = "\\script" + os.path.splitext(local_file_path)[1]
 
@@ -37,18 +37,18 @@ def run_script(address, username, password, process, local_file_path,
 
     if path_check:
         # copy the script file
-        ctx.logger.info ('Copying script file on remote machine')
+        ctx.logger.info('Copying script file on remote machine')
         run_remote_command(remote_shell_id, 'powershell', '-encodedcommand',
                            ' {0}'.format(encoded_script), conn)
 
         process = define_process_var(process)
 
-        ctx.logger.info ('Running the script on remote machine')
+        ctx.logger.info('Running the script on remote machine')
         run_remote_command(remote_shell_id, process, cmd_path,
                            remote_script_file_name, conn)
 
         if delete_after_running:
-            ctx.logger.info ('Removing script file from remote machine')
+            ctx.logger.info('Removing script file from remote machine')
             run_remote_command(remote_shell_id, 'del', cmd_path,
                                remote_script_file_name, conn)
     else:
@@ -151,21 +151,21 @@ def run_remote_command(remote_shell_id, process, cmd_path,
             ctx.logger.error('STDERR: {0}'.format(stderr))
     except winrm.exceptions.WinRMTransportError as remote_run_error:
         ctx.logger.error('Can\'t run remote command. Error: '
-                        '({0})'.format(str(remote_run_error)))
+                         '({0})'.format(str(remote_run_error)))
 
 
 def check_remote_path(remote_shell_id, cmd_path, conn):
     try:
         command_id = conn.run_command(remote_shell_id,
                                      'IF EXIST {0} (ECHO 1) '
-                                    'ELSE (ECHO 0)'.format(cmd_path))
+                                     'ELSE (ECHO 0)'.format(cmd_path))
         stdout, stderr, return_code = conn.get_command_output(remote_shell_id,
                                                               command_id)
         conn.cleanup_command(remote_shell_id, command_id)
         return True if int(stdout) == 1 else False
     except winrm.exceptions.WinRMTransportError as remote_run_error:
         raise RecoverableError('Can\'t run remote command. Error: '
-                                  '({0})'.format(str(remote_run_error)))
+                               '({0})'.format(str(remote_run_error)))
 
 
 def check_procces_and_ext(file_ext, process):
