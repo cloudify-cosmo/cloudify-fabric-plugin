@@ -35,6 +35,8 @@ from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
 
+import cloudify.ctx_wrappers
+
 from fabric_plugin import tunnel
 from fabric_plugin import exec_env
 
@@ -135,13 +137,15 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
     proxy_client_path = proxy_client.__file__
     if proxy_client_path.endswith('.pyc'):
         proxy_client_path = proxy_client_path[:-1]
-    local_ctx_sh_path = os.path.join(_get_bin_dir(),
-                                     'ctx-sh')
+    local_ctx_sh_path = os.path.join(_get_bin_dir(), 'ctx-sh')
+    local_ctx_py_path = os.path.join(
+        os.path.dirname(cloudify.ctx_wrappers.__file__), 'ctx-py.py')
     local_script_path = get_script(ctx.download_resource, script_path)
     base_script_path = os.path.basename(local_script_path)
     remote_ctx_dir = base_dir
     remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
     remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
+    remote_ctx_py_path = '{0}/cloudify.py'.format(remote_ctx_dir)
     remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
     remote_work_dir = '{0}/work'.format(remote_ctx_dir)
     remote_path_suffix = '{0}-{1}'.format(base_script_path,
@@ -172,11 +176,10 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
             # we get 0 exit code if the directory already exists
             fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
             fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
-
             # this file has to be present before using ctx
             fabric_api.put(local_ctx_sh_path, remote_ctx_sh_path)
-
             fabric_api.put(proxy_client_path, remote_ctx_path)
+            fabric_api.put(local_ctx_py_path, remote_ctx_py_path)
 
         actual_ctx = ctx._get_current_object()
 
@@ -269,6 +272,7 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
 
         env_script = StringIO()
         env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)
+        env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(remote_ctx_dir)
         env_script.write('chmod +x {0}\n'.format(remote_script_path))
         env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
         fabric_api.put(local_script_path, remote_script_path)
