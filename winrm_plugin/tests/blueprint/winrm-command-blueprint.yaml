@@ -44,6 +44,7 @@ inputs:
     default: http
 
 
+
 node_templates:
   elastic_ip:
     type: cloudify.aws.nodes.ElasticIP
@@ -108,4 +109,7 @@ node_templates:
                 process: { get_input: process}
                 winrm_port: { get_input: winrm_port }
                 winrm_protocol: { get_input: winrm_protocol }
-                commands: {get_input: commands}
+                commands:
+                  - Get-Acl
+                  - Get-ChildItem
+                  - Get-CimClass

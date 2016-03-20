@@ -65,12 +65,17 @@ def run_commands(commands, address, username, password,
 
     process= define_process_var(process)
 
-    for command in commands:
-        encode_command = create_encoded_command(command)
-        ctx.logger.info('running command: {0}'.format(command))
-        run_remote_command(remote_shell_id, process, '-encodedcommand',
-                           ' {0}'.format(encode_command), conn)
-
+    if process == 'powershell':
+        for command in commands:
+            encode_command = create_encoded_command(command)
+            ctx.logger.info('running command: {0}'.format(command))
+            run_remote_command(remote_shell_id, process, '-encodedcommand',
+                               ' {0}'.format(encode_command), conn)
+    else:
+        for command in commands:
+            ctx.logger.info('running command: {0}'.format(command))
+            run_remote_command(remote_shell_id, process, '',
+                               ' {0}'.format(command), conn)
 
 def define_script_path(remote_script_path, is_cmd=True):
 

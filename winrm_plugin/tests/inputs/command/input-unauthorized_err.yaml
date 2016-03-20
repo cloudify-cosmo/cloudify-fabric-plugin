@@ -1,11 +1,11 @@
- #AWS inputs
+# AWS inputs
 aws_config:
   aws_access_key_id: ''
   aws_secret_access_key: ''
 image_id: ami-3586ac5f
 instance_type: m3.medium
 
-# command inputs
+# Command inputs
 username: root
 password: Aa123456!
 process: powershell
