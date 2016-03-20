@@ -52,8 +52,9 @@ def run_script(address, username, password, process, local_file_path,
             run_remote_command(remote_shell_id, 'del', cmd_path,
                                remote_script_file_name, conn)
     else:
-        raise NonRecoverableError('Path {0} or {1} does not exist'\
+        raise NonRecoverableError('Path {0} or {1} does not exist'
                                   .format(cmd_path, powershell_path))
+
 
 @operation
 def run_commands(commands, address, username, password,
@@ -63,7 +64,7 @@ def run_commands(commands, address, username, password,
 
     remote_shell_id = get_remote_shell_id(conn)
 
-    process= define_process_var(process)
+    process = define_process_var(process)
 
     if process == 'powershell':
         for command in commands:
@@ -77,6 +78,7 @@ def run_commands(commands, address, username, password,
             run_remote_command(remote_shell_id, process, '',
                                ' {0}'.format(command), conn)
 
+
 def define_script_path(remote_script_path, is_cmd=True):
 
     tmp_env_var = '%TEMP%' if is_cmd else '$env:TEMP'
@@ -85,7 +87,8 @@ def define_script_path(remote_script_path, is_cmd=True):
 
 def get_conn(winrm_protocol, address, password, username, winrm_port):
 
-    endpoint = '{0}://{1}:{2}/wsman'.format(winrm_protocol, address, winrm_port)
+    endpoint = '{0}://{1}:{2}/wsman'.format(winrm_protocol, address,
+                                            winrm_port)
     return winrm.Protocol(endpoint=endpoint, transport='plaintext',
                           username=username, password=password)
 
@@ -100,8 +103,8 @@ def get_remote_shell_id(conn):
         raise NonRecoverableError('Can\'t create connection. Error: '
                                   '({0})'.format(str(remote_shell_error)))
     except (winrm.exceptions.WinRMTransportError) as remote_shell_error:
-       raise RecoverableError('Can\'t create connection. Error: '
-                              '({0})'.format(str(remote_shell_error)))
+        raise RecoverableError('Can\'t create connection. Error: '
+                               '({0})'.format(str(remote_shell_error)))
 
 
 def create_script_creation_command(local_file_path, powershell_path,
@@ -110,7 +113,7 @@ def create_script_creation_command(local_file_path, powershell_path,
     try:
         with open(local_file_path, 'r') as script_file:
             script_content = script_file.read()
-    except (TypeError,IOError) as read_file_error:
+    except (TypeError, IOError) as read_file_error:
         raise NonRecoverableError('Can\'t read this file. Error: '
                                   '{0}'.format(str(read_file_error)))
 
@@ -131,14 +134,14 @@ def create_encoded_command(command):
     try:
         return base64.b64encode(command.encode("utf_16_le"))
     except AttributeError as encoded_command_error:
-         raise NonRecoverableError('command var is None. Error: '
-                                   '{0}'.format(str(encoded_command_error)))
+        raise NonRecoverableError('command var is None. Error: '
+                                  '{0}'.format(str(encoded_command_error)))
 
 
 def define_process_var(process):
 
     process = process.lower()
-    return process if process !='cmd' else ' '
+    return process if process != 'cmd' else ' '
 
 
 def run_remote_command(remote_shell_id, process, cmd_path,
@@ -146,7 +149,7 @@ def run_remote_command(remote_shell_id, process, cmd_path,
     try:
         command_id = conn.run_command(
                 remote_shell_id, '{0} {1}{2}'.format(process, cmd_path,
-                                                    remote_script_file_name))
+                                                     remote_script_file_name))
         stdout, stderr, return_code = conn.get_command_output(remote_shell_id,
                                                               command_id)
         conn.cleanup_command(remote_shell_id, command_id)
@@ -162,8 +165,8 @@ def run_remote_command(remote_shell_id, process, cmd_path,
 def check_remote_path(remote_shell_id, cmd_path, conn):
     try:
         command_id = conn.run_command(remote_shell_id,
-                                     'IF EXIST {0} (ECHO 1) '
-                                     'ELSE (ECHO 0)'.format(cmd_path))
+                                      'IF EXIST {0} (ECHO 1) '
+                                      'ELSE (ECHO 0)'.format(cmd_path))
         stdout, stderr, return_code = conn.get_command_output(remote_shell_id,
                                                               command_id)
         conn.cleanup_command(remote_shell_id, command_id)
@@ -183,5 +186,5 @@ def check_procces_and_ext(file_ext, process):
     if powershell or python or cmd:
         return True
     else:
-        raise NonRecoverableError('procces: {0} can\'t run {1} files.'\
+        raise NonRecoverableError('procces: {0} can\'t run {1} files.'
                                   .format(process, file_ext))
