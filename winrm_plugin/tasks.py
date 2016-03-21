@@ -1,11 +1,8 @@
 # standard library imports
 import base64
 import os.path
-
-
 # installed libraries imports
 import winrm
-
 # our library imports
 from cloudify import ctx
 from cloudify.decorators import operation
@@ -36,7 +33,6 @@ def run_script(address, username, password, process, local_file_path,
     path_check = check_remote_path(remote_shell_id, cmd_path, conn)
 
     if path_check:
-        # copy the script file
         ctx.logger.info('Copying script file on remote machine')
         run_remote_command(remote_shell_id, 'powershell', '-encodedcommand',
                            ' {0}'.format(encoded_script), conn)
