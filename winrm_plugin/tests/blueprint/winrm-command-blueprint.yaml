@@ -43,7 +43,9 @@ inputs:
     description:  optional
     default: http
 
-
+  commands:
+    description:  optional
+    default: []
 
 node_templates:
   elastic_ip:
@@ -109,7 +111,4 @@ node_templates:
                 process: { get_input: process}
                 winrm_port: { get_input: winrm_port }
                 winrm_protocol: { get_input: winrm_protocol }
-                commands:
-                  - Get-Acl
-                  - Get-ChildItem
-                  - Get-CimClass
+                commands: { get_input: commands }

@@ -26,7 +26,7 @@ def run_script(address, username, password, process, local_file_path,
     encoded_script = create_script_creation_command(
             local_file_path, powershell_path, remote_script_file_name)
     cmd_path = define_script_path(remote_script_path)
-    check_procces_and_ext(file_ext, process)
+    check_process_and_ext(file_ext, process)
     path_check = check_remote_path(remote_shell_id, cmd_path, conn)
 
     if path_check:
@@ -51,7 +51,7 @@ def run_commands(commands, address, username, password,
                  process, winrm_port=5985, winrm_protocol='http', **kwargs):
 
     conn = get_conn(winrm_protocol, address, password, username, winrm_port)
-    remote_shell_id = get_remote_shell_id(conn)
+
 
     process = define_process_var(process)
     if process == 'powershell':
@@ -167,7 +167,7 @@ def check_remote_path(remote_shell_id, cmd_path, conn):
                                '({0})'.format(str(remote_run_error)))
 
 
-def check_procces_and_ext(file_ext, process):
+def check_process_and_ext(file_ext, process):
 
     process = process.lower()
     file_ext = file_ext.lower()
@@ -178,5 +178,6 @@ def check_procces_and_ext(file_ext, process):
     if powershell or python or cmd:
         return True
     else:
-        raise NonRecoverableError('procces: {0} can\'t run {1} files.'
+        raise NonRecoverableError('process'
+                                  ': {0} can\'t run {1} files.'
                                   .format(process, file_ext))
