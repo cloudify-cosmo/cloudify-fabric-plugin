@@ -52,7 +52,6 @@ def run_commands(commands, address, username, password,
 
     conn = get_conn(winrm_protocol, address, password, username, winrm_port)
 
-
     process = define_process_var(process)
     if process == 'powershell':
         for command in commands:
