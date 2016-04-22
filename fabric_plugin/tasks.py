@@ -61,7 +61,7 @@ FABRIC_ENV_DEFAULTS = {
     'pool_size': 0,
     'skip_bad_hosts': False,
     'status': False,
-    'disable_known_hosts': False,
+    'disable_known_hosts': True,
     'combine_stderr': True,
 }
 
