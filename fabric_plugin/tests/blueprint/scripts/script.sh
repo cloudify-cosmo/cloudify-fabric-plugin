@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+set -u
+
 test_run_script() {
     ctx instance runtime-properties test_value $test_value
 }
@@ -22,8 +24,11 @@ test_run_script_process_config() {
 }
 
 test_run_script_command_prefix() {
+    # we check that we're not using bash - $BASH_VERSION is undefined
+    # (default it to an empty string, so that the ctx invocation is still
+    # a "set" operation, not a "get")
     ctx instance runtime-properties sanity sanity
-    ctx instance runtime-properties bash_version $BASH_VERSION
+    ctx instance runtime-properties bash_version ${BASH_VERSION:-""}
 }
 
 test_run_script_reuse_existing_ctx_1() {
