@@ -29,5 +29,8 @@ setup(
         'fabric==1.8.3',
         'six>=1.8.0',
         'pywinrm',
+    ],
+    tests_require=[
+        'pytest'
     ]
 )

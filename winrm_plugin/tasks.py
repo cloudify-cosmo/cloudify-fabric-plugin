@@ -149,6 +149,7 @@ def run_remote_command(remote_shell_id, process, cmd_path,
     except exceptions.WinRMTransportError as remote_run_error:
         ctx.logger.error('Can\'t run remote command. Error: '
                          '({0})'.format(str(remote_run_error)))
+        # TODO: raise NonRecoverable but talk to Nir first to confirm
 
 
 def check_remote_path(remote_shell_id, cmd_path, conn):
