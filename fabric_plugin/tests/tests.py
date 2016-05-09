@@ -412,6 +412,11 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
             if files.exists(self.CUSTOM_BASE_DIR):
                 api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
 
+    def test_run_script_as_sudo(self):
+        self._execute(
+            'test_sudo.run_script',
+            script_path='mkdir.sh')
+
     def _test_run_script(self, script_path):
         expected_runtime_property_value = 'some_value'
         _, env = self._execute(
