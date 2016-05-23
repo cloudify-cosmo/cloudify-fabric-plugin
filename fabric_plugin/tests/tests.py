@@ -415,7 +415,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
     def test_run_script_as_sudo(self):
         self._execute(
             'test_sudo.run_script',
-            script_path='mkdir.sh')
+            script_path='scripts/mkdir.sh')
 
     def _test_run_script(self, script_path):
         expected_runtime_property_value = 'some_value'
