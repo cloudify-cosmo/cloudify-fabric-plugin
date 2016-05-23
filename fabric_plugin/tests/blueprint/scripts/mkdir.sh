@@ -3,3 +3,5 @@
 set -u
 
 mkdir -p /opt/test_dir
+
+echo 'DONE!'
