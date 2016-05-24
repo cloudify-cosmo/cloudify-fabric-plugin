@@ -45,7 +45,21 @@ node_templates:
                         process:         { get_input: process }
                         fabric_env:      { get_input: fabric_env }
                         custom_env_var:  { get_input: custom_input }
-
+            test_sudo:
+                run_commands:
+                    implementation: fabric.fabric_plugin.tasks.run_commands
+                    inputs:
+                        commands:        { get_input: commands   }
+                        fabric_env:      { get_input: fabric_env }
+                        sudo: true
+                run_script:
+                    implementation: fabric.fabric_plugin.tasks.run_script
+                    inputs:
+                        script_path:     { get_input: script_path }
+                        process:         { get_input: process }
+                        fabric_env:      { get_input: fabric_env }
+                        custom_env_var:  { get_input: custom_input }
+                        sudo: true
 
 workflows:
     execute_operation:

@@ -13,29 +13,29 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
-import json
 import os
-import unittest
-import contextlib
+import json
 import getpass
+import unittest
 import tempfile
-from mock import patch
+import contextlib
 from collections import namedtuple
 
+from mock import patch
 from fabric import api
 from fabric.contrib import files
 from fabric import context_managers
 
-from cloudify.exceptions import (NonRecoverableError,
-                                 RecoverableError)
+from cloudify import ctx
 from cloudify.workflows import local
-from cloudify.workflows import ctx as workflow_ctx
 from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
+from cloudify.workflows import ctx as workflow_ctx
+from cloudify.exceptions import (NonRecoverableError,
+                                 RecoverableError)
 
 from fabric_plugin import tasks
 from fabric_plugin.tasks import ILLEGAL_CTX_OPERATION_ERROR
-from cloudify import ctx
 
 
 def _mock_requests_get(url):
@@ -411,6 +411,11 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 api.run('rm -rf {0}'.format(tasks.DEFAULT_BASE_DIR))
             if files.exists(self.CUSTOM_BASE_DIR):
                 api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
+
+    def test_run_script_as_sudo(self):
+        self._execute(
+            'test_sudo.run_script',
+            script_path='scripts/mkdir.sh')
 
     def _test_run_script(self, script_path):
         expected_runtime_property_value = 'some_value'

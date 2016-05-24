@@ -15,27 +15,26 @@
 
 import os
 import sys
-import importlib
 import json
 import requests
 import tempfile
+import importlib
 from StringIO import StringIO
 
 from six import exec_
 from fabric import api as fabric_api
-from fabric import context_managers as fabric_context
 from fabric.contrib import files as fabric_files
+from fabric import context_managers as fabric_context
 
-from cloudify import utils
+import cloudify.ctx_wrappers
 from cloudify import ctx
+from cloudify import utils
 from cloudify import exceptions
 from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
-
-import cloudify.ctx_wrappers
 
 from fabric_plugin import tunnel
 from fabric_plugin import exec_env
@@ -76,7 +75,7 @@ CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
 @operation
 def run_task(tasks_file, task_name, fabric_env=None,
              task_properties=None, **kwargs):
-    """runs the specified fabric task loaded from 'tasks_file'
+    """Runs the specified fabric task loaded from 'tasks_file'
 
     :param tasks_file: the tasks file
     :param task_name: the task name to run in 'tasks_file'
@@ -85,14 +84,14 @@ def run_task(tasks_file, task_name, fabric_env=None,
                             as invocation kwargs
     """
     task = _get_task(tasks_file, task_name)
-    ctx.logger.info('running task: {0} from {1}'.format(task_name, tasks_file))
+    ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
     return _run_task(task, task_properties, fabric_env)
 
 
 @operation
 def run_module_task(task_mapping, fabric_env=None,
                     task_properties=None, **kwargs):
-    """runs the specified fabric module task specified by mapping'
+    """Runs the specified fabric module task specified by mapping'
 
     :param task_mapping: the task module mapping
     :param fabric_env: fabric configuration
@@ -100,7 +99,7 @@ def run_module_task(task_mapping, fabric_env=None,
                             as invocation kwargs
     """
     task = _get_task_from_mapping(task_mapping)
-    ctx.logger.info('running task: {0}'.format(task_mapping))
+    ctx.logger.info('Running task: {0}'.format(task_mapping))
     return _run_task(task, task_properties, fabric_env)
 
 
@@ -111,8 +110,8 @@ def _run_task(task, task_properties, fabric_env):
 
 
 @operation
-def run_commands(commands, fabric_env=None, **kwargs):
-    """runs the provider 'commands' in sequence
+def run_commands(commands, fabric_env=None, sudo=False, **kwargs):
+    """Runs the provider 'commands' in sequence
 
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
@@ -120,13 +119,20 @@ def run_commands(commands, fabric_env=None, **kwargs):
     with fabric_api.settings(**_fabric_env(fabric_env, warn_only=True)):
         for command in commands:
             ctx.logger.info('running command: {0}'.format(command))
-            result = fabric_api.run(command)
+            if sudo:
+                result = fabric_api.sudo(command)
+            else:
+                result = fabric_api.run(command)
             if result.failed:
                 raise FabricCommandError(result)
 
 
 @operation
-def run_script(script_path, fabric_env=None, process=None, **kwargs):
+def run_script(script_path,
+               fabric_env=None,
+               process=None,
+               sudo=False,
+               **kwargs):
 
     if not process:
         process = {}
@@ -291,8 +297,12 @@ def run_script(script_path, fabric_env=None, process=None, **kwargs):
                     # invokes sys.exc_info()
                     sys.exc_clear()
                     try:
-                        fabric_api.run('source {0} && {1}'.format(
-                            remote_env_script_path, command))
+                        command = 'source {0} && {1}'.format(
+                            remote_env_script_path, command)
+                        if sudo:
+                            fabric_api.sudo(command)
+                        else:
+                            fabric_api.run(command)
                     except FabricTaskError:
                         return handle_script_result(actual_ctx._return_value)
             return handle_script_result(actual_ctx._return_value)
@@ -364,7 +374,7 @@ def _get_task_from_mapping(mapping):
 
 
 def _get_task(tasks_file, task_name):
-    ctx.logger.debug('getting tasks file...')
+    ctx.logger.debug('Getting tasks file...')
     try:
         tasks_code = ctx.get_resource(tasks_file)
     except Exception as e:
@@ -391,7 +401,8 @@ def _get_task(tasks_file, task_name):
 
 
 class CredentialsHandler():
-    """handler to easily retrieve credentials info"""
+    """Handler to easily retrieve credentials info"""
+
     def __init__(self, _ctx, fabric_env):
         self.ctx = _ctx
         self.fabric_env = fabric_env
@@ -399,13 +410,13 @@ class CredentialsHandler():
 
     @property
     def user(self):
-        """returns the ssh user to use when connecting to the remote host"""
-        self.logger.debug('retrieving ssh user...')
+        """Returns the ssh user to use when connecting to the remote host"""
+        self.logger.debug('Retrieving ssh user...')
         if 'user' not in self.fabric_env:
             if self.ctx.bootstrap_context.cloudify_agent.user:
                 user = self.ctx.bootstrap_context.cloudify_agent.user
             else:
-                self.logger.error('no user configured for ssh connections')
+                self.logger.error('No user configured for ssh connections')
                 raise exceptions.NonRecoverableError(
                     'ssh user definition missing')
         else:
@@ -415,8 +426,8 @@ class CredentialsHandler():
 
     @property
     def key(self):
-        """returns the ssh key to use when connecting to the remote host"""
-        self.logger.debug('retrieving ssh key...')
+        """Returns the ssh key to use when connecting to the remote host"""
+        self.logger.debug('Retrieving ssh key...')
         if 'key' not in self.fabric_env:
             key = None
         else:
@@ -427,8 +438,8 @@ class CredentialsHandler():
 
     @property
     def key_filename(self):
-        """returns the ssh key to use when connecting to the remote host"""
-        self.logger.debug('retrieving ssh key...')
+        """Returns the ssh key to use when connecting to the remote host"""
+        self.logger.debug('Retrieving ssh key...')
         if CLOUDIFY_MANAGER_PRIVATE_KEY_PATH in os.environ:
             key = os.environ[CLOUDIFY_MANAGER_PRIVATE_KEY_PATH]
         elif 'key_filename' not in self.fabric_env:
@@ -444,8 +455,8 @@ class CredentialsHandler():
 
     @property
     def password(self):
-        """returns the ssh pwd to use when connecting to the remote host"""
-        self.logger.debug('retrieving ssh password...')
+        """Returns the ssh pwd to use when connecting to the remote host"""
+        self.logger.debug('Retrieving ssh password...')
         if 'password' in self.fabric_env:
             pwd = self.fabric_env['password']
         else:
@@ -456,7 +467,7 @@ class CredentialsHandler():
 
     @property
     def host_string(self):
-        self.logger.debug('retrieving host string...')
+        self.logger.debug('Retrieving host string...')
         if 'host_string' in self.fabric_env:
             host_string = self.fabric_env['host_string']
         else:
@@ -466,11 +477,8 @@ class CredentialsHandler():
 
 
 def _fabric_env(fabric_env, warn_only):
-    """prepares fabric environment variables configuration
-
-    :param fabric_env: fabric configuration
-    """
-    ctx.logger.info('preparing fabric environment...')
+    """Prepares fabric environment variables configuration"""
+    ctx.logger.info('Preparing fabric environment...')
     fabric_env = fabric_env or {}
     credentials = CredentialsHandler(ctx, fabric_env)
     final_env = {}
@@ -498,9 +506,9 @@ def _fabric_env(fabric_env, warn_only):
         final_env.get('key')
     ):
         raise exceptions.NonRecoverableError(
-            'access credentials not supplied '
+            'Access credentials not supplied '
             '(you must supply at least one of key_filename/key or password)')
-    ctx.logger.info('environment prepared successfully')
+    ctx.logger.info('Environment prepared successfully')
     return final_env
 
 
