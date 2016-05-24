@@ -7,4 +7,4 @@ This plugin allows running SSH commands and Fabric Tasks remotely..
 
 ## Usage
 
-See [Fabric Plugin](http://getcloudify.org/guide/plugin-fabric.html)
+See [Fabric Plugin](http://docs.getcloudify.org/latest/plugins/fabric/)
