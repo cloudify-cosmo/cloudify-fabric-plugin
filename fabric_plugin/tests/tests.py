@@ -13,29 +13,29 @@
 #    * See the License for the specific language governing permissions and
 #    * limitations under the License.
 
-import json
 import os
-import unittest
-import contextlib
+import json
 import getpass
+import unittest
 import tempfile
-from mock import patch
+import contextlib
 from collections import namedtuple
 
+from mock import patch
 from fabric import api
 from fabric.contrib import files
 from fabric import context_managers
 
-from cloudify.exceptions import (NonRecoverableError,
-                                 RecoverableError)
+from cloudify import ctx
 from cloudify.workflows import local
-from cloudify.workflows import ctx as workflow_ctx
 from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
+from cloudify.workflows import ctx as workflow_ctx
+from cloudify.exceptions import (NonRecoverableError,
+                                 RecoverableError)
 
 from fabric_plugin import tasks
 from fabric_plugin.tasks import ILLEGAL_CTX_OPERATION_ERROR
-from cloudify import ctx
 
 
 def _mock_requests_get(url):
@@ -72,7 +72,15 @@ class BaseFabricPluginTest(unittest.TestCase):
 
         def run(self, command):
             self.commands.append(command)
-            return BaseFabricPluginTest.MockCommandResult(command == 'fail')
+            self.settings_merged['use_sudo'] = False
+            return BaseFabricPluginTest.MockCommandResult(
+                command == 'fail')
+
+        def sudo(self, command):
+            self.commands.append(command)
+            self.settings_merged['use_sudo'] = True
+            return BaseFabricPluginTest.MockCommandResult(
+                command == 'fail')
 
     def setUp(self):
         self.default_fabric_env = {
@@ -89,6 +97,7 @@ class BaseFabricPluginTest(unittest.TestCase):
 
         def mock_get_bootstrap_context(self):
             return outer.bootstrap_context
+
         LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
         self.addCleanup(self.cleanup)
 
@@ -108,7 +117,8 @@ class BaseFabricPluginTest(unittest.TestCase):
                  script_path=None,
                  process=None,
                  ip=None,
-                 custom_input='value'):
+                 custom_input='value',
+                 use_sudo=False):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -117,6 +127,7 @@ class BaseFabricPluginTest(unittest.TestCase):
             'fabric_env': fabric_env or self.default_fabric_env,
             'task_name': task_name or 'stub',
             'commands': commands or [],
+            'use_sudo': use_sudo,
             'tasks_file': tasks_file or 'fabric_tasks.py',
             'task_properties': task_properties or {},
             'task_mapping': task_mapping or '',
@@ -144,33 +155,33 @@ class FabricPluginTest(BaseFabricPluginTest):
             self._execute('test.run_task', tasks_file='missing.py')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("Could not get 'missing.py'", e.message)
+            self.assertIn("Could not get 'missing.py'", str(e))
 
     def test_bad_tasks_file(self):
         try:
             self._execute('test.run_task', tasks_file='corrupted_file.py')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("Could not load 'corrupted_file.py'", e.message)
-            self.assertIn("ImportError: No module named module", e.message)
+            self.assertIn("Could not load 'corrupted_file.py'", str(e))
+            self.assertIn("ImportError: No module named module", str(e))
 
     def test_missing_task(self):
         try:
             self._execute('test.run_task', task_name='missing')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("Could not find task", e.message)
-            self.assertIn('missing', e.message)
-            self.assertIn('fabric_tasks.py', e.message)
+            self.assertIn("Could not find task", str(e))
+            self.assertIn('missing', str(e))
+            self.assertIn('fabric_tasks.py', str(e))
 
     def test_non_callable_task(self):
         try:
             self._execute('test.run_task', task_name='non_callable')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn('not callable', e.message)
-            self.assertIn('non_callable', e.message)
-            self.assertIn('fabric_tasks.py', e.message)
+            self.assertIn('not callable', str(e))
+            self.assertIn('non_callable', str(e))
+            self.assertIn('fabric_tasks.py', str(e))
 
     def test_missing_tasks_module(self):
         try:
@@ -178,7 +189,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                           task_mapping='module_that_does_not_exist.some_task')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("Could not load 'module_that", e.message)
+            self.assertIn("Could not load 'module_that", str(e))
 
     def test_missing_module_task_attribute(self):
         try:
@@ -186,7 +197,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                           task_mapping='fabric_plugin.tests.tests.whoami')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("Could not find 'whoami' in fabric_", e.message)
+            self.assertIn("Could not find 'whoami' in fabric_", str(e))
 
     def test_non_callable_module_task(self):
         try:
@@ -195,15 +206,15 @@ class FabricPluginTest(BaseFabricPluginTest):
                 task_mapping='fabric_plugin.tests.tests.non_callable')
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn("'non_callable' in 'fabric_", e.message)
-            self.assertIn('not callable', e.message)
+            self.assertIn("'non_callable' in 'fabric_", str(e))
+            self.assertIn('not callable', str(e))
 
     def test_run_task(self):
         self._execute('test.run_task', task_name='task')
         instance = self.env.storage.get_node_instances()[0]
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
-        self.assertIs(False, self.mock.settings_merged['warn_only'])
+        self.assertFalse(self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_run_module_task(self):
@@ -212,7 +223,7 @@ class FabricPluginTest(BaseFabricPluginTest):
         instance = self.env.storage.get_node_instances()[0]
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
-        self.assertIs(False, self.mock.settings_merged['warn_only'])
+        self.assertFalse(self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_task_properties(self):
@@ -221,13 +232,23 @@ class FabricPluginTest(BaseFabricPluginTest):
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(instance.runtime_properties['arg'], 'value')
 
-    def test_run_commands(self):
+    def _test_run_commands(self, use_sudo=False):
         commands = ['command1', 'command2']
-        self._execute('test.run_commands', commands=commands)
+        self._execute(
+            'test.run_commands',
+            commands=commands,
+            use_sudo=use_sudo)
         self.assertDictContainsSubset(self.default_fabric_env,
                                       self.mock.settings_merged)
-        self.assertIs(True, self.mock.settings_merged['warn_only'])
+        self.assertTrue(self.mock.settings_merged['warn_only'])
+        self.assertIs(use_sudo, self.mock.settings_merged['use_sudo'])
         self.assertListEqual(self.mock.commands, commands)
+
+    def test_run_commands(self):
+        self._test_run_commands()
+
+    def test_run_sudo_commands(self):
+        self._test_run_commands(use_sudo=True)
 
     def test_missing_user(self):
         try:
@@ -237,7 +258,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                                       'host_string': 'test'})
             self.fail()
         except NonRecoverableError as e:
-            self.assertEqual('ssh user definition missing', e.message)
+            self.assertEqual('ssh user definition missing', str(e))
 
     def test_missing_key_or_password(self):
         try:
@@ -247,7 +268,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                                       'host_string': 'test'})
             self.fail()
         except NonRecoverableError as e:
-            self.assertIn('key_filename/key or password', e.message)
+            self.assertIn('key_filename/key or password', str(e))
 
     def test_fabric_env_default_override(self):
         # first sanity for no override
@@ -362,13 +383,13 @@ class FabricPluginTest(BaseFabricPluginTest):
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
-        self.assertIs(False, self.mock.settings_merged['warn_only'])
+        self.assertFalse(self.mock.settings_merged['warn_only'])
         fabric_env = self.default_fabric_env.copy()
         fabric_env['warn_only'] = True
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
-        self.assertIs(True, self.mock.settings_merged['warn_only'])
+        self.assertTrue(self.mock.settings_merged['warn_only'])
 
     def test_failed_command(self):
         commands = ['fail']
@@ -387,17 +408,11 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
     def setUp(self):
         self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
         user = getpass.getuser()
-        if user not in ['ubuntu', 'travis']:
+        if user != 'ubuntu':
             raise unittest.SkipTest()
 
         super(FabricPluginRealSSHTests, self).setUp()
         user = getpass.getuser()
-        if user == 'travis':
-            self.default_fabric_env = {
-                'host_string': 'localhost',
-                'user': 'travis',
-                'password': 'travis'
-            }
         if user == 'ubuntu':
             self.default_fabric_env = {
                 'host_string': 'localhost',
@@ -420,7 +435,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
             process={
                 'env': {
                     'test_operation': self._testMethodName,
-                    'test_value': expected_runtime_property_value
+                    'test_value': expected_runtime_property_value,
                 },
             })
         instance = self.env.storage.get_node_instances()[0]
@@ -431,13 +446,25 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
         self._test_run_script('scripts/script.py')
 
     def test_run_script(self):
-        # Can't change name of test as it is passed
-        # to the script itself.
         self._test_run_script('scripts/script.sh')
 
     @patch('fabric_plugin.tasks.requests.get', _mock_requests_get)
     def test_run_script_from_url(self):
         self._test_run_script('http://localhost/scripts/script.sh')
+
+    def test_run_script_as_sudo(self):
+        self._execute(
+            'test.run_script',
+            script_path='scripts/script.sh',
+            use_sudo=True,
+            process={
+                'env': {
+                    'test_operation': self._testMethodName,
+                },
+            })
+        with context_managers.settings(**self.default_fabric_env):
+            self.assertTrue(files.exists('/opt/test_dir'))
+            api.sudo('rm -rf /opt/test_dir')
 
     def test_run_script_default_base_dir(self):
         _, env = self._execute(
@@ -560,7 +587,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except RecoverableError as e:
-            self.assertEquals(error_msg, e.message)
+            self.assertEquals(error_msg, str(e))
             # verify that ctx outputs error message to stderr
             _, output_local_copy_path = tempfile.mkstemp()
             with context_managers.settings(**self.default_fabric_env):
@@ -588,7 +615,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError as e:
-            self.assertEquals(error_msg, e.message)
+            self.assertEquals(error_msg, str(e))
             # verify that ctx outputs error message to stderr
             _, output_local_copy_path = tempfile.mkstemp()
             with context_managers.settings(**self.default_fabric_env):
@@ -609,7 +636,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                     }
                 })
         except NonRecoverableError as e:
-            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), e.message)
+            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), str(e))
 
     def test_crash_return_after_abort(self):
         error_msg = 'oops_we_got_an_error'
@@ -625,7 +652,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError as e:
-            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), e.message)
+            self.assertEquals(str(ILLEGAL_CTX_OPERATION_ERROR), str(e))
 
     def test_run_script_abort(self):
         error_msg = 'oops_we_got_an_error'
@@ -641,7 +668,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError as e:
-            self.assertEquals(error_msg, e.message)
+            self.assertEquals(error_msg, str(e))
 
     def test_abort_returns_nonzero_exit_code(self):
         from datetime import datetime
@@ -662,7 +689,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError as e:
-            self.assertEquals(error_msg, e.message)
+            self.assertEquals(error_msg, str(e))
             # verify that ctx outputs error message to stderr
             _, output_local_copy_path = tempfile.mkstemp()
             with context_managers.settings(**self.default_fabric_env):
@@ -685,7 +712,7 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 })
             self.fail('expected to raise an exception')
         except NonRecoverableError as e:
-            self.assertEquals(error_msg, e.message)
+            self.assertEquals(error_msg, str(e))
 
     def test_run_script_ctx_server_port(self):
         from cloudify.proxy import server

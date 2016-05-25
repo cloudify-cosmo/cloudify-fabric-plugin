@@ -107,5 +107,9 @@ test_run_script_download_resource_explicit_target_path() {
     ctx returns $(cat /tmp/hello)
 }
 
+test_run_script_as_sudo() {
+    mkdir -p /opt/test_dir
+}
+
 # Injected by test
 ${test_operation} $@
