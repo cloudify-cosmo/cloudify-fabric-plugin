@@ -1,0 +1,123 @@
+tosca_definitions_version: cloudify_dsl_1_2
+
+description: >
+  This blueprint defines an EC2 VM created using Cloudify's AWS plugin
+  and a simple web server started using Cloudify's winrm plugin.
+  In addition, an elastic IP and a security group are created and associated with the created VM.
+
+imports:
+  - http://www.getcloudify.org/spec/cloudify/3.3.1/types.yaml
+  - http://www.getcloudify.org/spec/aws-plugin/1.4/plugin.yaml
+  - /home/haviv/cloudify-cosmo/cloudify-fabric-plugin/plugin.yaml
+
+
+inputs:
+
+  image_id:
+    description: AWS EC2 image id to use for the server
+    default: 'ami-3586ac5f'
+
+  aws_config:
+    description: aws_access_key_id & aws_secret_access_key
+
+  instance_type:
+    description: AWS EC2 instance type to use for the server
+    default: m3.medium
+
+# script inputs + command inputs
+  local_file_path:
+    description:  must used when used in run script pluggin
+
+  delete_after_running:
+    description: optional get True/False
+    default: True
+
+  remote_script_path:
+    description: remote path on the remote machine
+
+  username:
+    description:  must used when used in winram_plugin
+
+  password:
+    description:  must used when used in winram_plugin
+
+  process:
+    description:  must used when used in winram_plugin
+    default: powershell
+
+  winrm_port:
+    description:  optional
+    default: 5985
+
+  winrm_protocol:
+    description:  optional
+    default: http
+
+
+node_templates:
+  elastic_ip:
+    type: cloudify.aws.nodes.ElasticIP
+    properties:
+      aws_config: { get_input: aws_config }
+
+  security_groups:
+    type: cloudify.aws.nodes.SecurityGroup
+    properties:
+      aws_config: { get_input: aws_config }
+      description: Security group for winrm test VM
+      rules:
+        - ip_protocol: tcp
+          cidr_ip: 0.0.0.0/0
+          from_port: 5985
+          to_port: 5986
+
+
+  vm:
+    type: cloudify.aws.nodes.Instance
+    properties:
+      aws_config: { get_input: aws_config }
+      agent_config:
+        install_method: none
+      image_id: { get_input: image_id }
+      instance_type: { get_input: instance_type }
+      parameters:
+        user_data: |
+          <powershell>
+          Set-ExecutionPolicy Unrestricted
+          winrm quickconfig -q
+          winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="300"}'
+          winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+          winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+          winrm set winrm/config/service/auth '@{Basic="true"}'
+          $name = hostname
+          ([adsi]"WinNT://$name/Administrator").SetPassword("Aa123456!")
+          &netsh advfirewall firewall add rule name="WinRM 5985" protocol=TCP dir=in localport=5985 action=allow
+          &netsh advfirewall firewall add rule name="WinRM 5986" protocol=TCP dir=in localport=5986 action=allow
+          </powershell>
+    relationships:
+      - type: cloudify.aws.relationships.instance_connected_to_elastic_ip
+        target: elastic_ip
+      - type: cloudify.aws.relationships.instance_connected_to_security_group
+        target: security_groups
+
+  winrm_plugin:
+    type: cloudify.nodes.WebServer
+    properties:
+      port: { get_input: winrm_port }
+    relationships:
+      - type: cloudify.relationships.contained_in
+        target: vm
+        target_interfaces:
+          cloudify.interfaces.relationship_lifecycle:
+            establish:
+              implementation: winrm.winrm_plugin.tasks.run_script
+              inputs:
+                address: { get_attribute: [elastic_ip, aws_resource_id] }
+                username: { get_input: username }
+                password: { get_input: password }
+                local_file_path: { get_input: local_file_path }
+                process: { get_input: process}
+                delete_after_running: { get_input: delete_after_running }
+                remote_script_path: { get_input: remote_script_path }
+                winrm_port: { get_input: winrm_port }
+                winrm_protocol: { get_input: winrm_protocol }

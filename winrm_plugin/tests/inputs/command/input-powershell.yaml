@@ -1,0 +1,17 @@
+# AWS inputs
+aws_config:
+  aws_access_key_id: ''
+  aws_secret_access_key: ''
+image_id: ami-3586ac5f
+instance_type: m3.medium
+
+# Command inputs
+username: Administrator
+password: Aa123456!
+process: powershell
+winrm_port: 5985
+winrm_protocol: http
+commands:
+  - Get-Acl
+  - Get-ChildItem
+  - Get-CimClass

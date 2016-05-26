@@ -1,0 +1,16 @@
+# AWS inputs
+aws_config:
+  aws_access_key_id: ''
+  aws_secret_access_key: ''
+image_id: ami-3586ac5f
+instance_type: m3.medium
+
+# Script inputs
+local_file_path: /home/haviv/cloudify-cosmo/cloudify-fabric-plugin/winrm_plugin/tests/example-script/script.ps1
+delete_after_running: false
+remote_script_path: c:\users\Administrator\desktop
+username: root
+password: Aa123456!
+process: powershell
+winrm_port: 5985
+winrm_protocol: http

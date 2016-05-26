@@ -21,12 +21,16 @@ setup(
     version='1.4.1.dev0',
     author='Gigaspaces',
     author_email='cosmo-admin@gigaspaces.com',
-    packages=['fabric_plugin'],
+    packages=['fabric_plugin', 'winrm_plugin'],
     license='LICENSE',
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
         'cloudify-plugins-common>=3.3.1',
         'fabric==1.8.3',
         'six>=1.8.0',
+        'pywinrm',
+    ],
+    tests_require=[
+        'pytest'
     ]
 )
