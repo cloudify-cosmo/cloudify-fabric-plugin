@@ -14,11 +14,13 @@
 #    * limitations under the License.
 
 import os
+import sys
 import json
 import getpass
 import unittest
 import tempfile
 import contextlib
+from StringIO import StringIO
 from collections import namedtuple
 
 from mock import patch
@@ -48,6 +50,10 @@ def _mock_requests_get(url):
     return response
 
 
+class TestException(Exception):
+    pass
+
+
 class BaseFabricPluginTest(unittest.TestCase):
 
     class MockCommandResult(object):
@@ -66,8 +72,11 @@ class BaseFabricPluginTest(unittest.TestCase):
             self.settings_merged = {}
 
         @contextlib.contextmanager
-        def settings(self, **kwargs):
+        def settings(self, *args, **kwargs):
             self.settings_merged.update(kwargs)
+            if args:
+                groups = args[0]
+                self.settings_merged.update({'hide_output': groups})
             yield
 
         def run(self, command):
@@ -81,6 +90,20 @@ class BaseFabricPluginTest(unittest.TestCase):
             self.settings_merged['use_sudo'] = True
             return BaseFabricPluginTest.MockCommandResult(
                 command == 'fail')
+
+        def hide(self, *groups):
+            return groups
+
+        def exists(self, path):
+            """Allows to return the settings in the `run_script`
+            execution method.
+
+            The first thing we do in the `run_script` function
+            is check if a path exists. Since we can't really
+            execute it as it requires a host, this will return
+            the settings for us to check.
+            """
+            raise TestException(self.settings_merged)
 
     def setUp(self):
         self.default_fabric_env = {
@@ -118,7 +141,8 @@ class BaseFabricPluginTest(unittest.TestCase):
                  process=None,
                  ip=None,
                  custom_input='value',
-                 use_sudo=False):
+                 use_sudo=False,
+                 hide_output=None):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -134,7 +158,8 @@ class BaseFabricPluginTest(unittest.TestCase):
             'ip': ip or '',
             'script_path': script_path or '',
             'process': process or {},
-            'custom_input': custom_input
+            'custom_input': custom_input,
+            'hide_output': hide_output or ()
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
@@ -402,6 +427,70 @@ class FabricPluginTest(BaseFabricPluginTest):
             self.assertEqual('mock_command', e.command)
             self.assertEqual(1, e.code)
 
+    def test_hide_viable_groups(self):
+        groups = ('running', 'stdout')
+        hide_func = tasks._hide_output(groups)
+        self.assertEqual(hide_func, groups)
+
+    def _test_hide_in_settings(self, execution_method, **kwargs):
+        groups = ('running', 'stdout')
+        self._execute(
+            'test.{0}'.format(execution_method),
+            hide_output=groups,
+            **kwargs)
+        self.assertDictContainsSubset(
+            {'hide_output': groups},
+            self.mock.settings_merged)
+
+    def _test_hide_non_viable_groups(self, execution_method, **kwargs):
+        try:
+            self._execute(
+                'test.{0}'.format(execution_method),
+                hide_output=('running', 'bla'),
+                **kwargs)
+            self.fail()
+        except NonRecoverableError as ex:
+            self.assertIn('`hide_output` must be a subset of', str(ex))
+
+    def test_hide_in_settings_and_non_viable_groups_in_commands(self):
+        self._test_hide_in_settings(
+            execution_method='run_commands')
+        self._test_hide_non_viable_groups(
+            execution_method='run_commands')
+
+    def test_hide_in_settings_and_non_viable_groups_in_task(self):
+        self._test_hide_in_settings(
+            execution_method='run_task',
+            task_name='task')
+        self._test_hide_non_viable_groups(
+            execution_method='run_task',
+            task_name='task')
+
+    def test_hide_in_settings_and_non_viable_groups_in_module(self):
+        self._test_hide_in_settings(
+            execution_method='run_module_task',
+            task_mapping='fabric_plugin.tests.tests.module_task')
+        self._test_hide_non_viable_groups(
+            execution_method='run_module_task',
+            task_mapping='fabric_plugin.tests.tests.module_task')
+
+    def test_hide_in_settings_and_non_viable_groups_in_script(self):
+        original_fabric_files = tasks.fabric_files
+        tasks.fabric_files = self.mock
+        try:
+            self._test_hide_in_settings(
+                execution_method='run_script',
+                script_path='scripts/script.py')
+            self.fail()
+        except TestException as ex:
+            self.assertIn("'hide_output': ('running', 'stdout')", str(ex))
+        finally:
+            tasks.fabric_files = original_fabric_files
+
+        self._test_hide_non_viable_groups(
+            execution_method='run_script',
+            script_path='scripts/script.sh')
+
 
 class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
@@ -426,6 +515,37 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 api.run('rm -rf {0}'.format(tasks.DEFAULT_BASE_DIR))
             if files.exists(self.CUSTOM_BASE_DIR):
                 api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
+
+    def test_run_script_with_hide(self):
+
+        def execute_script(hide_groups=None):
+            hide_groups = hide_groups or []
+            try:
+                previous_stdout = sys.stdout
+                current_stdout = StringIO()
+                sys.stdout = current_stdout
+                self._execute(
+                    'test.run_script',
+                    script_path='scripts/script.sh',
+                    process={
+                        'env': {
+                            'test_operation': self._testMethodName,
+                        },
+                    },
+                    hide_output=hide_groups)
+                output = current_stdout.getvalue().strip()
+            finally:
+                sys.stdout = previous_stdout
+            return output
+
+        expected_log_message = \
+            '[localhost] run: source /tmp/cloudify-ctx/scripts/'
+
+        output = execute_script()
+        self.assertIn(expected_log_message, output)
+
+        output = execute_script(hide_groups=['everything'])
+        self.assertNotIn(expected_log_message, output)
 
     def _test_run_script(self, script_path):
         expected_runtime_property_value = 'some_value'

@@ -16,11 +16,11 @@
 import os
 import sys
 import json
-import requests
 import tempfile
 import importlib
 from StringIO import StringIO
 
+import requests
 from six import exec_
 from fabric import api as fabric_api
 from fabric.contrib import files as fabric_files
@@ -74,7 +74,7 @@ CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
 
 @operation
 def run_task(tasks_file, task_name, fabric_env=None,
-             task_properties=None, **kwargs):
+             task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric task loaded from 'tasks_file'
 
     :param tasks_file: the tasks file
@@ -85,12 +85,12 @@ def run_task(tasks_file, task_name, fabric_env=None,
     """
     task = _get_task(tasks_file, task_name)
     ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
-    return _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env, hide_output)
 
 
 @operation
 def run_module_task(task_mapping, fabric_env=None,
-                    task_properties=None, **kwargs):
+                    task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric module task specified by mapping'
 
     :param task_mapping: the task module mapping
@@ -100,25 +100,33 @@ def run_module_task(task_mapping, fabric_env=None,
     """
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('Running task: {0}'.format(task_mapping))
-    return _run_task(task, task_properties, fabric_env)
+    return _run_task(task, task_properties, fabric_env, hide_output)
 
 
-def _run_task(task, task_properties, fabric_env):
-    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+def _run_task(task, task_properties, fabric_env, hide_output):
+    with fabric_api.settings(
+            _hide_output(groups=hide_output),
+            **_fabric_env(fabric_env, warn_only=False)):
         task_properties = task_properties or {}
         return task(**task_properties)
 
 
 @operation
-def run_commands(commands, fabric_env=None, use_sudo=False, **kwargs):
+def run_commands(commands,
+                 fabric_env=None,
+                 use_sudo=False,
+                 hide_output=None,
+                 **kwargs):
     """Runs the provider 'commands' in sequence
 
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
-    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=True)):
+    with fabric_api.settings(
+            _hide_output(groups=hide_output),
+            **_fabric_env(fabric_env, warn_only=True)):
         for command in commands:
-            ctx.logger.info('running command: {0}'.format(command))
+            ctx.logger.info('Running command: {0}'.format(command))
             run = fabric_api.sudo if use_sudo else fabric_api.run
             result = run(command)
             if result.failed:
@@ -130,6 +138,7 @@ def run_script(script_path,
                fabric_env=None,
                process=None,
                use_sudo=False,
+               hide_output=None,
                **kwargs):
 
     if not process:
@@ -170,11 +179,12 @@ def run_script(script_path,
     if args:
         command = ' '.join([command] + args)
 
-    with fabric_api.settings(**_fabric_env(fabric_env, warn_only=False)):
+    with fabric_api.settings(
+            _hide_output(groups=hide_output),
+            **_fabric_env(fabric_env, warn_only=False)):
         # the remote host must have ctx and any related files before
         # running any fabric scripts
         if not fabric_files.exists(remote_ctx_path):
-
             # there may be race conditions with other operations that
             # may be running in parallel, so we pass -p to make sure
             # we get 0 exit code if the directory already exists
@@ -312,7 +322,7 @@ def get_script(download_resource_func, script_path):
     if schema in ['http', 'https']:
         response = requests.get(script_path)
         if response.status_code == 404:
-            raise NonRecoverableError('Failed downloading script: {0} ('
+            raise NonRecoverableError('Failed to download script: {0} ('
                                       'status code: {1})'
                                       .format(script_path,
                                               response.status_code))
@@ -324,6 +334,25 @@ def get_script(download_resource_func, script_path):
         return script_path
     else:
         return download_resource_func(script_path)
+
+
+def _hide_output(groups):
+    possible_groups = (
+        'status',
+        'aborts',
+        'warnings',
+        'running',
+        'stdout',
+        'stderr',
+        'user',
+        'everything'
+    )
+    groups = groups or ()
+    if any(group not in possible_groups for group in groups):
+        raise NonRecoverableError(
+            '`hide_output` must be a subset of {0} (Provided: {1})'.format(
+                ', '.join(possible_groups), ', '.join(groups)))
+    return fabric_api.hide(*groups)
 
 
 def _get_bin_dir():

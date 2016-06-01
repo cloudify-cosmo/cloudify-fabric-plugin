@@ -111,5 +111,10 @@ test_run_script_as_sudo() {
     mkdir -p /opt/test_dir
 }
 
+test_run_script_with_hide() {
+    # The content here is irrelevant
+    ctx logger info "TEST"
+}
+
 # Injected by test
 ${test_operation} $@
