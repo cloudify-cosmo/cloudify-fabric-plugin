@@ -484,11 +484,12 @@ class CredentialsHandler():
         self.logger.debug('Retrieving ssh password...')
         if 'password' in self.fabric_env:
             pwd = self.fabric_env['password']
-        elif 'password' in self.fabric_env['host_string'].fabric_env:
-            pwd = self.fabric_env['host_string'].fabric_env['password']
         else:
-            self.logger.debug('ssh password not configured')
-            return None
+            if self.ctx.bootstrap_context.cloudify_agent.user.password:
+                pwd = self.ctx.bootstrap_context.cloudify_agent.user.password
+            else:
+                self.logger.debug('ssh password not configured')
+                return None
         self.logger.debug('ssh pwd is: {0}'.format(pwd))
         return pwd
 
