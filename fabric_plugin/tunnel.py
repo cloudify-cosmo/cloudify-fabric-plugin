@@ -32,6 +32,23 @@ def remote(local_port, remote_port=0, local_host="localhost",
     threads = []
 
     def accept(channel, (src_addr, src_port), (dest_addr, dest_port)):
+        # This seemingly innocent statement seems to be doing nothing
+        # but the truth is far from it!
+        # calling fileno() on a paramiko channel the first time, creates
+        # the required plumbing to make the channel valid for select.
+        # While this would generally happen implicitly inside the _forwarder
+        # function when select is called, it may already be too late and may
+        # cause the select loop to hang.
+        # Specifically, when new data arrives to the channel, a flag is set
+        # on an "event" object which is what makes the select call work.
+        # problem is this will only happen if the event object is not None
+        # and it will be not-None only after channel.fileno() has been called
+        # for the first time. If we wait until _forwarder calls select for the
+        # first time it may be after initial data has reached the channel.
+        # calling it explicitly here in the paramiko transport main event loop
+        # guarantees this will not happen.
+        channel.fileno()
+
         channels.append(channel)
         sock = socket.socket()
         sockets.append(sock)
