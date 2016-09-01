@@ -503,7 +503,7 @@ class CredentialsHandler():
 
 def _fabric_env(fabric_env, warn_only):
     """Prepares fabric environment variables configuration"""
-    ctx.logger.info('Preparing fabric environment...')
+    ctx.logger.debug('Preparing fabric environment...')
     fabric_env = fabric_env or {}
     credentials = CredentialsHandler(ctx, fabric_env)
     final_env = {}
@@ -533,7 +533,7 @@ def _fabric_env(fabric_env, warn_only):
         raise exceptions.NonRecoverableError(
             'Access credentials not supplied '
             '(you must supply at least one of key_filename/key or password)')
-    ctx.logger.info('Environment prepared successfully')
+    ctx.logger.debug('Environment prepared successfully')
     return final_env
 
 
