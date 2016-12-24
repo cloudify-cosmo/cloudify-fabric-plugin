@@ -28,6 +28,7 @@ from fabric import context_managers as fabric_context
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
+from cloudify import context
 from cloudify import utils
 from cloudify import exceptions
 from cloudify.decorators import operation
@@ -495,8 +496,13 @@ class CredentialsHandler():
         self.logger.debug('Retrieving host string...')
         if 'host_string' in self.fabric_env:
             host_string = self.fabric_env['host_string']
-        else:
+        elif self.ctx.type == context.NODE_INSTANCE:
             host_string = self.ctx.instance.host_ip
+        elif self.ctx.type == context.RELATIONSHIP_INSTANCE:
+            host_string = self.ctx.capabilities.instance.host_ip
+        else:
+            raise exceptions.NonRecoverableError(
+               'unknown host_string (host IP)')
         self.logger.debug('ssh host_string is: {0}'.format(host_string))
         return host_string
 
