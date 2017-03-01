@@ -26,7 +26,7 @@ setup(
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
         'cloudify-plugins-common>=3.3.1',
-        'fabric==1.8.3',
+        'fabric==1.13.1',
         'six>=1.8.0',
     ]
 )
