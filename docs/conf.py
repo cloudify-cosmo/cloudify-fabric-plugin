@@ -48,7 +48,8 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.coverage',
     'sphinx.ext.ifconfig',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'sphinx.ext.extlinks',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -285,3 +286,10 @@ texinfo_documents = [
 #texinfo_no_detailmenu = False
 
 autodoc_member_order = 'bysource'
+
+
+extlinks = {
+    'fabric_usage': (
+        'http://docs.fabfile.org/en/1.13/usage/%s.html',
+        'Fabric Usage'),
+}

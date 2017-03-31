@@ -3,23 +3,28 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to cloudify-fabric-plgun's documentation!
-===============================================
+.. _Fabric: http://docs.fabfile.org
 
-Contents:
+Cloudify Fabric plugin
+======================
+
+The `Fabric`_ plugin can be used to map operations to ssh commands or Fabric tasks that are included in your blueprint.
+
+The plugin provides an agent-less method for running operations on destination hosts.
+
+Contents
+--------
 
 .. toctree::
-   :maxdepth: 2
 
-.. automodule:: fabric_plugin.tasks
-   :members:
-   :undoc-members:
-   :show-inheritance:
+    requirements
+    usage
+
+
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 

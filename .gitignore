@@ -76,3 +76,7 @@ coverage.xml
 
 # QuickBuild
 .qbcache/
+
+
+# Sphinx build dir
+_build/
