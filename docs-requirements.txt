@@ -1,0 +1,2 @@
+pyyaml
+git+https://github.com/cloudify-cosmo/sphinxify.git
