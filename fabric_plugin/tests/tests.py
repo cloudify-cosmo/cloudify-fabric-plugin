@@ -565,6 +565,9 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
     def test_run_python_script(self):
         self._test_run_script('scripts/script.py')
 
+    def test_nested_property(self):
+        self._test_run_script('scripts/script.py')
+
     def test_run_script(self):
         self._test_run_script('scripts/script.sh')
 
