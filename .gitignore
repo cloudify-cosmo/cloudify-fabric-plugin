@@ -76,3 +76,6 @@ coverage.xml
 
 # QuickBuild
 .qbcache/
+
+.idea/
+
