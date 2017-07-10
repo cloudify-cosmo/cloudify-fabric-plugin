@@ -56,9 +56,10 @@ class TestException(Exception):
 
 class BaseFabricPluginTest(unittest.TestCase):
 
-    class MockCommandResult(object):
+    class MockCommandResult(str):
 
         def __init__(self, failed):
+            str.__init__(self)
             self.failed = failed
             self.stdout = 'mock_stdout'
             self.stderr = 'mock_stderr'

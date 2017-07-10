@@ -180,7 +180,7 @@ def run_script(script_path,
                 base_dir = fabric_api.run(
                     '( [[ -n "${0}" ]] && echo -n ${0} ) || '
                     'echo -n $(dirname $(mktemp -u))'.format(
-                    utils.CFY_EXEC_TEMPDIR_ENVVAR))
+                        utils.CFY_EXEC_TEMPDIR_ENVVAR))
             else:
                 base_dir = fabric_api.run('echo -n $(dirname $(mktemp -u))')
 
