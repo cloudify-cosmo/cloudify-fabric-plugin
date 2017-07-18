@@ -17,6 +17,7 @@ import os
 import sys
 import json
 import tempfile
+import posixpath
 import importlib
 from StringIO import StringIO
 
@@ -180,14 +181,14 @@ def run_script(script_path,
                 base_dir = fabric_api.run(
                     '( [[ -n "${0}" ]] && echo -n ${0} ) || '
                     'echo -n $(dirname $(mktemp -u))'.format(
-                    utils.CFY_EXEC_TEMPDIR_ENVVAR))
+                        utils.CFY_EXEC_TEMPDIR_ENVVAR))
             else:
                 base_dir = fabric_api.run('echo -n $(dirname $(mktemp -u))')
 
         if not base_dir:
             raise NonRecoverableError('Could not conclude temporary directory')
 
-        base_dir = os.path.join(base_dir, DEFAULT_BASE_SUBDIR)
+        base_dir = posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
 
         ctx.logger.debug('base_dir set to: {0}'.format(base_dir))
 
