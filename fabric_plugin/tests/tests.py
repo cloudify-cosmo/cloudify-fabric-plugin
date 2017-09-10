@@ -19,6 +19,7 @@ import json
 import getpass
 import unittest
 import tempfile
+import posixpath
 import contextlib
 from StringIO import StringIO
 from collections import namedtuple
@@ -37,7 +38,8 @@ from cloudify.exceptions import (NonRecoverableError,
                                  RecoverableError)
 
 from fabric_plugin import tasks
-from fabric_plugin.tasks import ILLEGAL_CTX_OPERATION_ERROR
+from fabric_plugin.tasks import (ILLEGAL_CTX_OPERATION_ERROR,
+                                 DEFAULT_BASE_SUBDIR)
 
 
 def _mock_requests_get(url):
@@ -56,9 +58,10 @@ class TestException(Exception):
 
 class BaseFabricPluginTest(unittest.TestCase):
 
-    class MockCommandResult(object):
+    class MockCommandResult(str):
 
         def __init__(self, failed):
+            str.__init__(self)
             self.failed = failed
             self.stdout = 'mock_stdout'
             self.stderr = 'mock_stderr'
@@ -495,7 +498,7 @@ class FabricPluginTest(BaseFabricPluginTest):
 class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
     def setUp(self):
-        self.CUSTOM_BASE_DIR = '/tmp/new-cloudify-ctx'
+        self.CUSTOM_BASE_DIR = '/tmp/new-tmp'
         user = getpass.getuser()
         if user != 'ubuntu':
             raise unittest.SkipTest()
@@ -511,8 +514,8 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
 
         tasks.fabric_api = self.original_fabric_api
         with context_managers.settings(**self.default_fabric_env):
-            if files.exists(tasks.DEFAULT_BASE_DIR):
-                api.run('rm -rf {0}'.format(tasks.DEFAULT_BASE_DIR))
+            if files.exists(DEFAULT_BASE_SUBDIR):
+                api.run('rm -rf {0}'.format(DEFAULT_BASE_SUBDIR))
             if files.exists(self.CUSTOM_BASE_DIR):
                 api.run('rm -rf {0}'.format(self.CUSTOM_BASE_DIR))
 
@@ -565,6 +568,9 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
     def test_run_python_script(self):
         self._test_run_script('scripts/script.py')
 
+    def test_nested_property(self):
+        self._test_run_script('scripts/script.py')
+
     def test_run_script(self):
         self._test_run_script('scripts/script.sh')
 
@@ -596,7 +602,9 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                 },
             })
         instance = self.env.storage.get_node_instances()[0]
-        self.assertEqual('{0}/work'.format(tasks.DEFAULT_BASE_DIR),
+        self.assertEqual(posixpath.join(tempfile.gettempdir(),
+                                        DEFAULT_BASE_SUBDIR,
+                                        'work'),
                          instance.runtime_properties['work_dir'])
 
     def test_run_script_process_config(self):
@@ -628,8 +636,10 @@ class FabricPluginRealSSHTests(BaseFabricPluginTest):
                          instance.runtime_properties['arg2_value'])
         self.assertEqual(expected_cwd,
                          instance.runtime_properties['cwd'])
-        self.assertEqual('{0}/ctx'.format(expected_base_dir),
-                         instance.runtime_properties['ctx_path'])
+        self.assertEqual(
+            posixpath.join(expected_base_dir, DEFAULT_BASE_SUBDIR, 'ctx'),
+            instance.runtime_properties['ctx_path']
+        )
 
     def test_run_script_command_prefix(self):
         _, env = self._execute(
@@ -915,5 +925,6 @@ def execute_operation(operation, **kwargs):
 
 def module_task():
     ctx.instance.runtime_properties['task_called'] = 'called'
+
 
 non_callable = 1

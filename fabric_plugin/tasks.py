@@ -17,6 +17,7 @@ import os
 import sys
 import json
 import tempfile
+import posixpath
 import importlib
 from StringIO import StringIO
 
@@ -51,7 +52,7 @@ UNSUPPORTED_SCRIPT_FEATURE_ERROR = \
     RuntimeError('ctx abort & retry commands are only supported in Cloudify '
                  '3.4 or later')
 
-DEFAULT_BASE_DIR = '/tmp/cloudify-ctx'
+DEFAULT_BASE_SUBDIR = 'cloudify-ctx'
 
 FABRIC_ENV_DEFAULTS = {
     'connection_attempts': 5,
@@ -145,7 +146,6 @@ def run_script(script_path,
     if not process:
         process = {}
     process = _create_process_config(process, kwargs)
-    base_dir = process.get('base_dir', DEFAULT_BASE_DIR)
     ctx_server_port = process.get('ctx_server_port')
 
     proxy_client_path = proxy_client.__file__
@@ -156,33 +156,62 @@ def run_script(script_path,
         os.path.dirname(cloudify.ctx_wrappers.__file__), 'ctx-py.py')
     local_script_path = get_script(ctx.download_resource, script_path)
     base_script_path = os.path.basename(local_script_path)
-    remote_ctx_dir = base_dir
-    remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
-    remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
-    remote_ctx_py_path = '{0}/cloudify.py'.format(remote_ctx_dir)
-    remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
-    remote_work_dir = '{0}/work'.format(remote_ctx_dir)
     remote_path_suffix = '{0}-{1}'.format(base_script_path,
                                           utils.id_generator(size=8))
-    remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
-                                                  remote_path_suffix)
-    remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
-                                          remote_path_suffix)
 
     env = process.get('env', {})
-    cwd = process.get('cwd', remote_work_dir)
     args = process.get('args')
     command_prefix = process.get('command_prefix')
-
-    command = remote_script_path
-    if command_prefix:
-        command = '{0} {1}'.format(command_prefix, command)
-    if args:
-        command = ' '.join([command] + args)
 
     with fabric_api.settings(
             _hide_output(groups=hide_output),
             **_fabric_env(fabric_env, warn_only=False)):
+        # Determine the basedir. In order of precedence:
+
+        # * 'base_dir' process input
+        # * ${CFY_EXEC_TEMP}/cloudify-ctx on the remote machine, if
+        #   CFY_EXEC_TEMP is defined
+        # * <python default tempdir>/cloudify-ctx
+
+        base_dir = process.get('base_dir')
+
+        if not base_dir:
+            #  "CFY_EXEC_TEMPDIR_ENVVAR" doesn't exist in 3.3.1, so
+            # to remain backward compatible...
+            if hasattr(utils, 'CFY_EXEC_TEMPDIR_ENVVAR'):
+                base_dir = fabric_api.run(
+                    '( [[ -n "${0}" ]] && echo -n ${0} ) || '
+                    'echo -n $(dirname $(mktemp -u))'.format(
+                        utils.CFY_EXEC_TEMPDIR_ENVVAR))
+            else:
+                base_dir = fabric_api.run('echo -n $(dirname $(mktemp -u))')
+
+        if not base_dir:
+            raise NonRecoverableError('Could not conclude temporary directory')
+
+        base_dir = posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
+
+        ctx.logger.debug('base_dir set to: {0}'.format(base_dir))
+
+        remote_ctx_dir = base_dir
+        remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
+        remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
+        remote_ctx_py_path = '{0}/cloudify.py'.format(remote_ctx_dir)
+        remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
+        remote_work_dir = '{0}/work'.format(remote_ctx_dir)
+        remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
+                                                      remote_path_suffix)
+        remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
+                                              remote_path_suffix)
+
+        cwd = process.get('cwd', remote_work_dir)
+
+        command = remote_script_path
+        if command_prefix:
+            command = '{0} {1}'.format(command_prefix, command)
+        if args:
+            command = ' '.join([command] + args)
+
         # the remote host must have ctx and any related files before
         # running any fabric scripts
         if not fabric_files.exists(remote_ctx_path):
