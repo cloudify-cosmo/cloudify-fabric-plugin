@@ -320,9 +320,31 @@ def run_script(script_path,
         env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
         fabric_api.put(local_script_path, remote_script_path)
         proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
+
+        ctx.logger.info('Running Proxy Server Port command: {0}'.format(
+            proxy.port))
+
+        ctx.logger.info('Running Proxy Server url command: {0}'.format(
+            proxy.socket_url))
+
+        req = requests.get(proxy.socket_url)
+
+        ctx.logger.info('Calling proxy server response Code: {0}'.format(
+            req.status_code))
+
+        ctx.logger.info('Calling proxy server headers: {0}'.format(
+            req.headers))
+
+        ctx.logger.info('Calling proxy server text response: {0}'.format(
+            req.text))
+
+        ctx.logger.info('Calling proxy server json response: {0}'.format(
+            req.json()))
+
         try:
             with fabric_context.cd(cwd):
                 local_port = proxy.port
+
                 with tunnel.remote(local_port=local_port) as remote_port:
                     env[CTX_SOCKET_URL] = proxy.socket_url.replace(
                         str(local_port), str(remote_port))
@@ -333,6 +355,25 @@ def run_script(script_path,
                     # invoke sys.exc_clear() because handle_script_result
                     # invokes sys.exc_info()
                     sys.exc_clear()
+
+                    req = requests.get(proxy.socket_url)
+
+                    ctx.logger.info('Calling proxy server'
+                                    ' (tunnel) response Code: {0}'.
+                                    format(req.status_code))
+
+                    ctx.logger.info('Calling proxy server'
+                                    ' (tunnel) headers: {0}'.
+                                    format(req.headers))
+
+                    ctx.logger.info(
+                        'Calling proxy server (tunnel)'
+                        'text response: {0}'.format(req.text))
+
+                    ctx.logger.info(
+                        'Calling proxy server (tunnel)'
+                        ' json response: {0}'.format(req.json()))
+
                     try:
                         command = 'source {0} && {1}'.format(
                             remote_env_script_path, command)
