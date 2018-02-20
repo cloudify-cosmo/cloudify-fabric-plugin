@@ -377,6 +377,10 @@ def run_script(script_path,
                     try:
                         command = 'source {0} && {1}'.format(
                             remote_env_script_path, command)
+
+                        ctx.logger.info('Command to run is {0}'.format(
+                            command))
+
                         run = fabric_api.sudo if use_sudo else fabric_api.run
                         run(command)
                     except FabricTaskError:
