@@ -327,7 +327,7 @@ def run_script(script_path,
         ctx.logger.info('Running Proxy Server url command: {0}'.format(
             proxy.socket_url))
 
-        req = requests.get(proxy.socket_url)
+        req = requests.post(proxy.socket_url)
 
         ctx.logger.info('Calling proxy server response Code: {0}'.format(
             req.status_code))
@@ -356,7 +356,7 @@ def run_script(script_path,
                     # invokes sys.exc_info()
                     sys.exc_clear()
 
-                    req = requests.get(proxy.socket_url)
+                    req = requests.post(proxy.socket_url)
 
                     ctx.logger.info('Calling proxy server'
                                     ' (tunnel) response Code: {0}'.
