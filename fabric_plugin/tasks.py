@@ -338,8 +338,8 @@ def run_script(script_path,
         ctx.logger.info('Calling proxy server text response: {0}'.format(
             req.text))
 
-        ctx.logger.info('Calling proxy server json response: {0}'.format(
-            req.json()))
+        # ctx.logger.info('Calling proxy server json response: {0}'.format(
+        #     req.json()))
 
         try:
             with fabric_context.cd(cwd):
@@ -370,9 +370,9 @@ def run_script(script_path,
                         'Calling proxy server (tunnel)'
                         'text response: {0}'.format(req.text))
 
-                    ctx.logger.info(
-                        'Calling proxy server (tunnel)'
-                        ' json response: {0}'.format(req.json()))
+                    # ctx.logger.info(
+                    #     'Calling proxy server (tunnel)'
+                    #     ' json response: {0}'.format(req.json()))
 
                     try:
                         command = 'source {0} && {1}'.format(
