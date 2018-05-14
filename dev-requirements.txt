@@ -1,5 +1,2 @@
-#https://github.com/cloudify-cosmo/cloudify-dsl-parser/archive/master.zip
-#https://github.com/cloudify-cosmo/cloudify-rest-client/archive/master.zip
-#https://github.com/cloudify-cosmo/cloudify-plugins-common/archive/master.zip
-https://github.com/opencm/cloudify-common-opencm/archive/master.zip
+https://github.com/cloudify-cosmo/cloudify-common/archive/master.zip
 mock
