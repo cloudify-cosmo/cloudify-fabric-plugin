@@ -337,7 +337,12 @@ def run_script(script_path,
                         command = 'source {0} && {1}'.format(
                             remote_env_script_path, command)
                         run = fabric_api.sudo if use_sudo else fabric_api.run
-                        run(command)
+                        ctx.logger.info("Running command: %s", command)
+                        output = run(command)
+                        ctx.logger.info(
+                            "Command completed, %s",
+                            "stdout/stderr follow:\n{0}".format(
+                                output) if output else "no stdout/stderr available")
                     except FabricTaskError:
                         return handle_script_result(actual_ctx._return_value)
             return handle_script_result(actual_ctx._return_value)
