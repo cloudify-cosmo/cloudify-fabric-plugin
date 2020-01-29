@@ -1,0 +1,39 @@
+tosca_definitions_version: cloudify_dsl_1_3
+
+imports:
+  - https://cloudify.co/spec/cloudify/4.4/types.yaml
+  - ../plugin.yaml
+
+inputs:
+
+  host_string:
+    type: string
+    description: >
+       host string
+
+  user:
+    type: string
+    description: >
+       user
+
+  password:
+    type: string
+    description: >
+       password
+
+node_templates:
+
+  host:
+    type: cloudify.nodes.ApplicationServer
+    interfaces:
+      cloudify.interfaces.lifecycle:
+        create:
+          implementation: fabric.fabric_plugin.tasks.run_script
+          inputs:
+            script_path: scripts/server.sh
+            fabric_env:
+              host_string: { get_input: host_string }
+              user: { get_input: user }
+              password: { get_input: password }
+              no_agent: true
+              always_use_pty: false
