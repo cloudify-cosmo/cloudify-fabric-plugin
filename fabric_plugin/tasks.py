@@ -1,5 +1,4 @@
-########
-# Copyright (c) 2014 GigaSpaces Technologies Ltd. All rights reserved
+# Copyright (c) 2014-2020 Cloudify Platform Ltd. All rights reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -9,9 +8,9 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-#    * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    * See the License for the specific language governing permissions and
-#    * limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import os
 import sys
@@ -73,7 +72,7 @@ FABRIC_ENV_DEFAULTS = {
 CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
 
 
-@operation
+@operation(resumable=True)
 def run_task(tasks_file, task_name, fabric_env=None,
              task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric task loaded from 'tasks_file'
@@ -89,7 +88,7 @@ def run_task(tasks_file, task_name, fabric_env=None,
     return _run_task(task, task_properties, fabric_env, hide_output)
 
 
-@operation
+@operation(resumable=True)
 def run_module_task(task_mapping, fabric_env=None,
                     task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric module task specified by mapping'
@@ -112,7 +111,7 @@ def _run_task(task, task_properties, fabric_env, hide_output):
         return task(**task_properties)
 
 
-@operation
+@operation(resumable=True)
 def run_commands(commands,
                  fabric_env=None,
                  use_sudo=False,
@@ -134,7 +133,7 @@ def run_commands(commands,
                 raise FabricCommandError(result)
 
 
-@operation
+@operation(resumable=True)
 def run_script(script_path,
                fabric_env=None,
                process=None,
@@ -341,8 +340,8 @@ def run_script(script_path,
                         output = run(command)
                         ctx.logger.info(
                             "Command completed, %s",
-                            "stdout/stderr follow:\n{0}".format(
-                                output) if output else "no stdout/stderr available")
+                            "stdout/stderr follow:\n{0}".format(output)
+                            if output else "no stdout/stderr available")
                     except FabricTaskError:
                         return handle_script_result(actual_ctx._return_value)
             return handle_script_result(actual_ctx._return_value)
