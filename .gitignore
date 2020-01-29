@@ -70,6 +70,7 @@ coverage.xml
 *.pot
 
 # Sphinx documentation
+docs/_build/
 
 
 *COMMIT_MSG
