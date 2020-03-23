@@ -35,13 +35,10 @@ from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
 
-from fabric_plugin import tunnel
 from fabric_plugin import exec_env
 
-try:
-    from cloudify.proxy.client import ScriptException
-except ImportError:
-    ScriptException = None
+from cloudify.proxy.client import ScriptException
+
 
 
 ILLEGAL_CTX_OPERATION_ERROR = RuntimeError('ctx may only abort or return once')
@@ -431,7 +428,7 @@ def _get_task(tasks_file, task_name):
                                                     type(e).__name__, e))
     exec_globs = exec_env.exec_globals(tasks_file)
     try:
-        exec_(tasks_code, _globs_=exec_globs)
+        exec(tasks_code, {}, exec_globs)
     except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not load '{0}' ({1}: {2})".format(tasks_file,
