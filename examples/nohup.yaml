@@ -35,5 +35,3 @@ node_templates:
               host_string: { get_input: host_string }
               user: { get_input: user }
               password: { get_input: password }
-              no_agent: true
-              always_use_pty: false
