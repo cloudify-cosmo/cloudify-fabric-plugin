@@ -18,13 +18,12 @@ import json
 import tempfile
 import posixpath
 import importlib
+
 from StringIO import StringIO
+from contextlib import contextmanager
 
 import requests
-from six import exec_
-from fabric import api as fabric_api
-from fabric.contrib import files as fabric_files
-from fabric import context_managers as fabric_context
+from fabric import Connection
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
@@ -70,6 +69,27 @@ FABRIC_ENV_DEFAULTS = {
 # that is executed on a client different than the one used
 # to bootstrap
 CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
+
+
+@contextmanager
+def ssh_connection(ctx, fabric_env):
+    host = fabric_env.get('host_string') or ctx.instance.host_ip
+    user = fabric_env.get('user') or ctx.bootstrap_context.cloudify_agent.user
+    connect_kwargs = {}
+    if 'key' in fabric_env:
+        connect_kwargs['key'] = fabric_env['key']
+    if 'key_filename' in fabric_env:
+        connect_kwargs['key_filename'] = fabric_env['key_filename']
+    if 'password' in fabric_env:
+        connect_kwargs['password'] = fabric_env['password']
+    conn = Connection(
+        host=host,
+        user=user,
+        connect_kwargs=connect_kwargs or None,
+        port=fabric_env.get('port') or 22
+    )
+    conn.open()
+    yield conn
 
 
 @operation(resumable=True)
@@ -133,8 +153,163 @@ def run_commands(commands,
                 raise FabricCommandError(result)
 
 
+class _FabricCtx(object):
+    def __init__(self, ctx, files):
+        self._ctx = ctx
+        self._files = files
+
+    def __getattr__(self, name):
+        return getattr(self._ctx, name)
+
+    def download_resource(self, resource_path, target_path=None):
+        local_target_path = self._ctx.download_resource(resource_path)
+        return self._fabric_put_in_remote_path(local_target_path, target_path)
+
+    def download_resource_and_render(self,
+                                     resource_path,
+                                     target_path=None,
+                                     template_variables=None):
+        local_target_path = self._ctx.download_resource_and_render(
+            resource_path,
+            template_variables=template_variables)
+
+        return self._fabric_put_in_remote_path(local_target_path, target_path)
+
+    def _fabric_put_in_remote_path(self, local_target_path, target_path):
+        if target_path:
+            remote_target_path = target_path
+        else:
+            remote_target_path = posixpath.join(
+                self._files.remote_work_dir,
+                os.path.basename(local_target_path))
+
+        self._files.put(local_target_path, remote_target_path)
+        return remote_target_path
+
+    def returns(self, _value):
+        if self._ctx._return_value is not None:
+            self._ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
+            raise self._ctx._return_value
+        self._ctx._return_value = _value
+
+    def retry_operation(self, message=None, retry_after=None):
+        if self._ctx._return_value is not None:
+            self._ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
+            raise self._ctx._return_value
+        self._ctx.operation.retry(message=message, retry_after=retry_after)
+        self._ctx._return_value = ScriptException(message, retry=True)
+        return self._ctx._return_value
+
+    def abort_operation(self, message=None):
+        if self._ctx._return_value is not None:
+            self._ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
+            raise self._ctx._return_value
+        self._ctx._return_value = ScriptException(message)
+        return self._ctx._return_value
+
+
+class _RemoteFiles(object):
+    def __init__(self, conn, script_path, base_dir=None):
+        self._conn = conn
+        self._sftp = conn.sftp()
+        self._script_path = script_path
+        if base_dir:
+            base_dir = posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
+        self.base_dir = base_dir
+
+    def __enter__(self):
+        if not self.base_dir:
+            self.base_dir = self._find_base_dir()
+        self._upload_ctx()
+        return self
+
+    def __exit__(self, exc, val, tb):
+        # TODO add cleaning of the scripts
+        pass
+
+    def put(self, local, remote, **kwargs):
+        return self._sftp.put(local, remote, **kwargs)
+
+    def exists(self, path):
+        try:
+            self._sftp.stat(path)
+        except IOError:
+            return False
+        else:
+            return True
+
+    def upload_script(self, script_path):
+        base_script_path = os.path.basename(script_path)
+        remote_path_suffix = '{0}-{1}'.format(
+            base_script_path, utils.id_generator(size=8))
+        self.remote_env_script_path = posixpath.join(
+            self.remote_scripts_dir,
+            'env-' + remote_path_suffix
+        )
+        self.remote_script_path = posixpath.join(
+            self.remote_scripts_dir,
+            remote_path_suffix)
+        self._sftp.put(script_path, self.remote_script_path)
+
+    def upload_env_script(self, env):
+        with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
+            env_script.write('chmod +x {0}\n'.format(self.remote_script_path))
+            env_script.write('chmod +x {0}\n'.format(self.remote_ctx_path))
+            for key, value in env.items():
+                env_script.write('export {0}={1}\n'.format(key, value))
+
+    def _upload_ctx(self):
+        self.remote_ctx_path = '{0}/ctx'.format(self.base_dir)
+        self.remote_ctx_sh_path = '{0}/ctx-sh'.format(self.base_dir)
+        self.remote_ctx_py_path = '{0}/cloudify.py'.format(self.base_dir)
+        self.remote_work_dir = '{0}/work'.format(self.base_dir)
+        self.remote_scripts_dir = '{0}/scripts'.format(self.base_dir)
+
+        if not self.exists(self.remote_ctx_path):
+            self._sftp.mkdir(self.base_dir)
+            self._sftp.mkdir(self.remote_work_dir)
+            self._sftp.mkdir(self.remote_scripts_dir)
+            self.put(
+                proxy_client.__file__.rstrip('c'),  # strip ".pyc" to ".py"
+                self.remote_ctx_path)
+            self.put(
+                os.path.join(_get_bin_dir(), 'ctx-sh'),
+                self.remote_ctx_sh_path)
+            self.put(
+                os.path.join(
+                    os.path.dirname(cloudify.ctx_wrappers.__file__),
+                    'ctx-py.py'
+                ),
+                self.remote_ctx_py_path)
+
+    def _find_base_dir(self):
+        """Determine the basedir. In order of precedence:
+            * 'base_dir' process input
+            * ${CFY_EXEC_TEMP}/cloudify-ctx on the remote machine, if
+              CFY_EXEC_TEMP is defined
+            * <python default tempdir>/cloudify-ctx
+        """
+        base_dir = self._conn.run(
+            '( [[ -n "${0}" ]] && echo -n ${0} ) || '
+            'echo -n $(dirname $(mktemp -u))'.format(
+                utils.ENV_CFY_EXEC_TEMPDIR)).stdout.strip()
+        if not base_dir:
+            raise NonRecoverableError('Could not conclude temporary directory')
+        return posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
+
+
+@contextmanager
+def _make_proxy(ctx, port):
+    proxy = proxy_server.HTTPCtxProxy(ctx, port=port)
+    try:
+        yield proxy
+    finally:
+        proxy.close()
+
+
 @operation(resumable=True)
-def run_script(script_path,
+def run_script(ctx,
+               script_path,
                fabric_env=None,
                process=None,
                use_sudo=False,
@@ -146,207 +321,52 @@ def run_script(script_path,
     process = _create_process_config(process, kwargs)
     ctx_server_port = process.get('ctx_server_port')
 
-    proxy_client_path = proxy_client.__file__
-    if proxy_client_path.endswith('.pyc'):
-        proxy_client_path = proxy_client_path[:-1]
-    local_ctx_sh_path = os.path.join(_get_bin_dir(), 'ctx-sh')
-    local_ctx_py_path = os.path.join(
-        os.path.dirname(cloudify.ctx_wrappers.__file__), 'ctx-py.py')
     local_script_path = get_script(ctx.download_resource, script_path)
-    base_script_path = os.path.basename(local_script_path)
-    remote_path_suffix = '{0}-{1}'.format(base_script_path,
-                                          utils.id_generator(size=8))
 
     env = process.get('env', {})
     args = process.get('args')
     command_prefix = process.get('command_prefix')
 
-    with fabric_api.settings(
-            _hide_output(groups=hide_output),
-            **_fabric_env(fabric_env, warn_only=False)):
-        # Determine the basedir. In order of precedence:
+    with ssh_connection(ctx, fabric_env) as conn, \
+            _RemoteFiles(conn, process.get('base_dir')) as files:
+        files.upload_script(local_script_path)
+        fabric_ctx = _FabricCtx(ctx, files)
 
-        # * 'base_dir' process input
-        # * ${CFY_EXEC_TEMP}/cloudify-ctx on the remote machine, if
-        #   CFY_EXEC_TEMP is defined
-        # * <python default tempdir>/cloudify-ctx
+        with _make_proxy(ctx, ctx_server_port) as proxy,
+                conn.forward_remote(proxy.port):
+            env['PATH'] = '{0}:$PATH'.format(files.base_dir)
+            env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(files.base_dir)
 
-        base_dir = process.get('base_dir')
+            command = files.remote_script_path
+            if command_prefix:
+                command = '{0} {1}'.format(command_prefix, command)
+            if args:
+                command = ' '.join([command] + args)
+            cwd = process.get('cwd', files.remote_work_dir)
+            env[CTX_SOCKET_URL] = proxy.socket_url
+            env['LOCAL_{0}'.format(CTX_SOCKET_URL)] = proxy.socket_url
+            files.upload_env_script(env)
+            command = 'cd {0} && source {1} && {2}'.format(
+                cwd, files.remote_env_script_path, command)
+            run = conn.sudo if use_sudo else conn.run
+            ctx.logger.info("Running command: %s", command)
+            output = run(command)
+            ctx.logger.info(
+                "Command completed, stdout: %s", output.stdout)
+            ctx.logger.info(
+                "Command completed, stderr: %s", output.stderr)
 
-        if not base_dir:
-            #  "CFY_EXEC_TEMPDIR_ENVVAR" doesn't exist in 3.3.1, so
-            # to remain backward compatible...
-            if hasattr(utils, 'CFY_EXEC_TEMPDIR_ENVVAR'):
-                base_dir = fabric_api.run(
-                    '( [[ -n "${0}" ]] && echo -n ${0} ) || '
-                    'echo -n $(dirname $(mktemp -u))'.format(
-                        utils.CFY_EXEC_TEMPDIR_ENVVAR))
+        result = getattr(fabric_ctx, '_return_value', None)
+        if isinstance(result, ScriptException):
+            if result.retry:
+                return result
             else:
-                base_dir = fabric_api.run('echo -n $(dirname $(mktemp -u))')
-
-        if not base_dir:
-            raise NonRecoverableError('Could not conclude temporary directory')
-
-        base_dir = posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
-
-        ctx.logger.debug('base_dir set to: {0}'.format(base_dir))
-
-        remote_ctx_dir = base_dir
-        remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
-        remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
-        remote_ctx_py_path = '{0}/cloudify.py'.format(remote_ctx_dir)
-        remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
-        remote_work_dir = '{0}/work'.format(remote_ctx_dir)
-        remote_env_script_path = '{0}/env-{1}'.format(remote_scripts_dir,
-                                                      remote_path_suffix)
-        remote_script_path = '{0}/{1}'.format(remote_scripts_dir,
-                                              remote_path_suffix)
-
-        cwd = process.get('cwd', remote_work_dir)
-
-        command = remote_script_path
-        if command_prefix:
-            command = '{0} {1}'.format(command_prefix, command)
-        if args:
-            command = ' '.join([command] + args)
-
-        # the remote host must have ctx and any related files before
-        # running any fabric scripts
-        if not fabric_files.exists(remote_ctx_path):
-            # there may be race conditions with other operations that
-            # may be running in parallel, so we pass -p to make sure
-            # we get 0 exit code if the directory already exists
-            fabric_api.run('mkdir -p {0}'.format(remote_scripts_dir))
-            fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
-            # this file has to be present before using ctx
-            fabric_api.put(local_ctx_sh_path, remote_ctx_sh_path)
-            fabric_api.put(proxy_client_path, remote_ctx_path)
-            fabric_api.put(local_ctx_py_path, remote_ctx_py_path)
-
-        actual_ctx = ctx._get_current_object()
-
-        actual_ctx.is_script_exception_defined = ScriptException is not None
-
-        def abort_operation(message=None):
-            if actual_ctx._return_value is not None:
-                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
-                raise actual_ctx._return_value
-            if actual_ctx.is_script_exception_defined:
-                actual_ctx._return_value = ScriptException(message)
-            else:
-                actual_ctx._return_value = UNSUPPORTED_SCRIPT_FEATURE_ERROR
-                raise actual_ctx
-            return actual_ctx._return_value
-
-        def retry_operation(message=None, retry_after=None):
-            if actual_ctx._return_value is not None:
-                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
-                raise actual_ctx._return_value
-            actual_ctx.operation.retry(message=message,
-                                       retry_after=retry_after)
-            if actual_ctx.is_script_exception_defined:
-                actual_ctx._return_value = ScriptException(message, retry=True)
-            else:
-                actual_ctx._return_value = UNSUPPORTED_SCRIPT_FEATURE_ERROR
-                raise actual_ctx._return_value
-            return actual_ctx._return_value
-
-        actual_ctx.abort_operation = abort_operation
-        actual_ctx.retry_operation = retry_operation
-
-        def returns(_value):
-            if actual_ctx._return_value is not None:
-                actual_ctx._return_value = ILLEGAL_CTX_OPERATION_ERROR
-                raise actual_ctx._return_value
-            actual_ctx._return_value = _value
-        actual_ctx.returns = returns
-
-        actual_ctx._return_value = None
-        original_download_resource = actual_ctx.download_resource
-
-        def download_resource(resource_path, target_path=None):
-            local_target_path = original_download_resource(resource_path)
-            return fabric_put_in_remote_path(local_target_path, target_path)
-
-        actual_ctx.download_resource = download_resource
-
-        original_download_resource_and_render = \
-            actual_ctx.download_resource_and_render
-
-        def download_resource_and_render(resource_path,
-                                         target_path=None,
-                                         template_variables=None):
-            local_target_path = original_download_resource_and_render(
-                resource_path,
-                template_variables=template_variables)
-
-            return fabric_put_in_remote_path(local_target_path, target_path)
-
-        actual_ctx.download_resource_and_render = download_resource_and_render
-
-        def fabric_put_in_remote_path(local_target_path, target_path):
-            if target_path:
-                remote_target_path = target_path
-            else:
-                remote_target_path = '{0}/{1}'.format(
-                    remote_work_dir,
-                    os.path.basename(local_target_path))
-            fabric_api.put(local_target_path, remote_target_path)
-            return remote_target_path
-
-        def handle_script_result(script_result):
-            if (actual_ctx.is_script_exception_defined and
-               isinstance(script_result, ScriptException)):
-                if script_result.retry:
-                    return script_result
-                else:
-                    raise NonRecoverableError(str(script_result))
-            # this happens when more than 1 ctx operation is invoked or
-            # the plugin runs an unsupported feature on older Cloudify
-            elif isinstance(script_result, RuntimeError):
-                raise NonRecoverableError(str(script_result))
-            # determine if this code runs during exception handling
-            current_exception = sys.exc_info()[1]
-            if current_exception:
-                raise
-            else:
-                return script_result
-
-        env_script = StringIO()
-        env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)
-        env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(remote_ctx_dir)
-        env_script.write('chmod +x {0}\n'.format(remote_script_path))
-        env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
-        fabric_api.put(local_script_path, remote_script_path)
-        proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
-        try:
-            with fabric_context.cd(cwd):
-                local_port = proxy.port
-                with tunnel.remote(local_port=local_port) as remote_port:
-                    env[CTX_SOCKET_URL] = proxy.socket_url.replace(
-                        str(local_port), str(remote_port))
-                    env['LOCAL_{0}'.format(CTX_SOCKET_URL)] = proxy.socket_url
-                    for key, value in env.iteritems():
-                        env_script.write('export {0}={1}\n'.format(key, value))
-                    fabric_api.put(env_script, remote_env_script_path)
-                    # invoke sys.exc_clear() because handle_script_result
-                    # invokes sys.exc_info()
-                    sys.exc_clear()
-                    try:
-                        command = 'source {0} && {1}'.format(
-                            remote_env_script_path, command)
-                        run = fabric_api.sudo if use_sudo else fabric_api.run
-                        ctx.logger.info("Running command: %s", command)
-                        output = run(command)
-                        ctx.logger.info(
-                            "Command completed, %s",
-                            "stdout/stderr follow:\n{0}".format(output)
-                            if output else "no stdout/stderr available")
-                    except FabricTaskError:
-                        return handle_script_result(actual_ctx._return_value)
-            return handle_script_result(actual_ctx._return_value)
-        finally:
-            proxy.close()
+                raise NonRecoverableError(str(result))
+        elif isinstance(result, RuntimeError):
+            # this happens when more than 1 ctx operation is invoked
+            raise NonRecoverableError(str(result))
+        else:
+            return result
 
 
 def get_script(download_resource_func, script_path):
