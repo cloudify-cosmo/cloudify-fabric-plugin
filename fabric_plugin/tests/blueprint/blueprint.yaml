@@ -13,7 +13,6 @@ inputs:
     custom_input:
         default: value
     use_sudo:        {}
-    hide_output:     {}
 
 node_templates:
     test:
@@ -28,7 +27,6 @@ node_templates:
                         commands:        { get_input: commands   }
                         fabric_env:      { get_input: fabric_env }
                         use_sudo:        { get_input: use_sudo }
-                        hide_output:     { get_input: hide_output }
                 run_task:
                     implementation: fabric.fabric_plugin.tasks.run_task
                     inputs:
@@ -36,14 +34,12 @@ node_templates:
                         task_name:       { get_input: task_name  }
                         task_properties: { get_input: task_properties }
                         fabric_env:      { get_input: fabric_env }
-                        hide_output:     { get_input: hide_output }
                 run_module_task:
                     implementation: fabric.fabric_plugin.tasks.run_module_task
                     inputs:
                         task_mapping:    { get_input: task_mapping }
                         task_properties: { get_input: task_properties }
                         fabric_env:      { get_input: fabric_env }
-                        hide_output:     { get_input: hide_output }
                 run_script:
                     implementation: fabric.fabric_plugin.tasks.run_script
                     inputs:
@@ -52,7 +48,6 @@ node_templates:
                         fabric_env:      { get_input: fabric_env }
                         custom_env_var:  { get_input: custom_input }
                         use_sudo:        { get_input: use_sudo }
-                        hide_output:     { get_input: hide_output }
 
 workflows:
     execute_operation:

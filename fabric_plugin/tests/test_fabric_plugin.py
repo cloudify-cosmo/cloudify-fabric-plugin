@@ -51,8 +51,7 @@ class BaseFabricPluginTest(unittest.TestCase):
                  process=None,
                  ip=None,
                  custom_input='value',
-                 use_sudo=False,
-                 hide_output=None):
+                 use_sudo=False):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -69,7 +68,6 @@ class BaseFabricPluginTest(unittest.TestCase):
             'script_path': script_path or '',
             'process': process or {},
             'custom_input': custom_input,
-            'hide_output': hide_output or ()
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
