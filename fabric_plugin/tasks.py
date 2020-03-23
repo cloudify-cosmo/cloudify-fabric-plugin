@@ -277,7 +277,7 @@ class _RemoteFiles(object):
         base_dir = self._conn.run(
             '( [[ -n "${0}" ]] && echo -n ${0} ) || '
             'echo -n $(dirname $(mktemp -u))'.format(
-                utils.ENV_CFY_EXEC_TEMPDIR)).stdout.strip()
+                utils.ENV_CFY_EXEC_TEMPDIR), hide=True).stdout.strip()
         if not base_dir:
             raise NonRecoverableError('Could not conclude temporary directory')
         return posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
@@ -334,11 +334,9 @@ def run_script(ctx,
                 cwd, files.remote_env_script_path, command)
             run = conn.sudo if use_sudo else conn.run
             ctx.logger.info("Running command: %s", command)
-            output = run(command)
-            ctx.logger.info(
-                "Command completed, stdout: %s", output.stdout)
-            ctx.logger.info(
-                "Command completed, stderr: %s", output.stderr)
+            result = run(command, hide=True)
+            _log_output(ctx, result.stdout, prefix='<out> ')
+            _log_output(ctx, result.stderr, prefix='<err> ')
 
         result = getattr(fabric_ctx, '_return_value', None)
         if isinstance(result, ScriptException):
@@ -351,6 +349,16 @@ def run_script(ctx,
             raise NonRecoverableError(str(result))
         else:
             return result
+
+
+def _log_output(ctx, data, prefix):
+    lines = data.split('\n')
+    if not lines:
+        return
+    if not lines[-1]:
+        lines.pop()
+    for line in lines:
+        ctx.logger.info('%s%s', prefix, line)
 
 
 def get_script(download_resource_func, script_path):
