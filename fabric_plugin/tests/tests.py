@@ -347,17 +347,6 @@ class FabricPluginTest(BaseFabricPluginTest):
                       fabric_env=fabric_env)
         self.assertTrue(self._get_conn_kwargs()['warn_only'])
 
-    def test_failed_command(self):
-        commands = ['fail']
-        try:
-            self._execute('test.run_commands', commands=commands)
-            self.fail()
-        except tasks.FabricCommandError as e:
-            self.assertEqual('mock_stdout', e.output)
-            self.assertEqual('mock_stderr', e.error)
-            self.assertEqual('mock_command', e.command)
-            self.assertEqual(1, e.code)
-
 
 @workflow
 def execute_operation(operation, **kwargs):
