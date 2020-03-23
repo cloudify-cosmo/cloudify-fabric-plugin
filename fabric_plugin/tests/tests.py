@@ -14,7 +14,6 @@
 
 import os
 import unittest
-from collections import namedtuple
 
 from invoke import Context
 from mock import patch, MagicMock, Mock
@@ -27,10 +26,6 @@ from cloudify.workflows import ctx as workflow_ctx
 from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import tasks
-
-
-class TestException(Exception):
-    pass
 
 
 class BaseFabricPluginTest(unittest.TestCase):
@@ -362,70 +357,6 @@ class FabricPluginTest(BaseFabricPluginTest):
             self.assertEqual('mock_stderr', e.error)
             self.assertEqual('mock_command', e.command)
             self.assertEqual(1, e.code)
-
-    def test_hide_viable_groups(self):
-        groups = ('running', 'stdout')
-        hide_func = tasks._hide_output(groups)
-        self.assertEqual(hide_func, groups)
-
-    def _test_hide_in_settings(self, execution_method, **kwargs):
-        groups = ('running', 'stdout')
-        self._execute(
-            'test.{0}'.format(execution_method),
-            hide_output=groups,
-            **kwargs)
-        self.assertDictContainsSubset(
-            {'hide_output': groups},
-            self.mock.settings_merged)
-
-    def _test_hide_non_viable_groups(self, execution_method, **kwargs):
-        try:
-            self._execute(
-                'test.{0}'.format(execution_method),
-                hide_output=('running', 'bla'),
-                **kwargs)
-            self.fail()
-        except NonRecoverableError as ex:
-            self.assertIn('`hide_output` must be a subset of', str(ex))
-
-    def test_hide_in_settings_and_non_viable_groups_in_commands(self):
-        self._test_hide_in_settings(
-            execution_method='run_commands')
-        self._test_hide_non_viable_groups(
-            execution_method='run_commands')
-
-    def test_hide_in_settings_and_non_viable_groups_in_task(self):
-        self._test_hide_in_settings(
-            execution_method='run_task',
-            task_name='task')
-        self._test_hide_non_viable_groups(
-            execution_method='run_task',
-            task_name='task')
-
-    def test_hide_in_settings_and_non_viable_groups_in_module(self):
-        self._test_hide_in_settings(
-            execution_method='run_module_task',
-            task_mapping='fabric_plugin.tests.tests.module_task')
-        self._test_hide_non_viable_groups(
-            execution_method='run_module_task',
-            task_mapping='fabric_plugin.tests.tests.module_task')
-
-    def test_hide_in_settings_and_non_viable_groups_in_script(self):
-        original_fabric_files = tasks.fabric_files
-        tasks.fabric_files = self.mock
-        try:
-            self._test_hide_in_settings(
-                execution_method='run_script',
-                script_path='scripts/script.py')
-            self.fail()
-        except TestException as ex:
-            self.assertIn("'hide_output': ('running', 'stdout')", str(ex))
-        finally:
-            tasks.fabric_files = original_fabric_files
-
-        self._test_hide_non_viable_groups(
-            execution_method='run_script',
-            script_path='scripts/script.sh')
 
 
 @workflow
