@@ -326,19 +326,6 @@ class FabricPluginTest(BaseFabricPluginTest):
         kw = self._get_conn_kwargs()
         self.assertEqual('explicit_user', kw['user'])
 
-    def test_override_warn_only(self):
-        fabric_env = self.default_fabric_env.copy()
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env)
-        self.assertFalse(self._get_conn_kwargs()['warn_only'])
-        fabric_env = self.default_fabric_env.copy()
-        fabric_env['warn_only'] = True
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env)
-        self.assertTrue(self._get_conn_kwargs()['warn_only'])
-
 
 @workflow
 def execute_operation(operation, **kwargs):
