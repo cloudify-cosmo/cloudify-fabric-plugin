@@ -130,7 +130,8 @@ def _run_task(ctx, task, task_properties, fabric_env):
 
 
 @operation(resumable=True)
-def run_commands(commands,
+def run_commands(ctx,
+                 commands,
                  fabric_env=None,
                  use_sudo=False,
                  **kwargs):
@@ -139,14 +140,11 @@ def run_commands(commands,
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
-    with fabric_api.settings(
-            **_fabric_env(fabric_env, warn_only=True)):
+    with ssh_connection(ctx, fabric_env) as conn:
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
-            run = fabric_api.sudo if use_sudo else fabric_api.run
-            result = run(command)
-            if result.failed:
-                raise FabricCommandError(result)
+            run = conn.sudo if use_sudo else conn.run
+            run(command)
 
 
 class _FabricCtx(object):
