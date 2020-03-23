@@ -56,7 +56,7 @@ node_templates:
 
 workflows:
     execute_operation:
-        mapping: fabric.fabric_plugin.tests.tests.execute_operation
+        mapping: fabric.fabric_plugin.tests.test_fabric_plugin.execute_operation
         parameters: { operation: {} }
 
 plugins:

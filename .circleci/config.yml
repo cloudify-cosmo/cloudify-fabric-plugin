@@ -10,33 +10,35 @@ checkout:
       fi
 
 jobs:
+  flake8:
+    docker:
+      - image: circleci/python:2.7
+    steps:
+      - checkout
+      - run: pip install flake8 --user
+      - run:
+          name: Run flake8
+          command: flake8 fabric_plugin
 
   unittests:
     docker:
-      - image: circleci/python:2.7.15-stretch
+      - image: circleci/python:2.7
     steps:
       - checkout
       - run:
-          name: Download pip
-          command: curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
+          name: install dependencies
+          command: |
+            pip install --user -r dev-requirements.txt
+            pip install --user .
       - run:
-          name: Install pip
-          command: sudo python get-pip.py
-      - run:
-          name: Install virtualenv
-          command: pip install --user virtualenv
-      - run:
-          name: Init virtualenv
-          command: virtualenv env
-      - run:
-          name: install tox
-          command: pip install --user tox
-      - run: /home/circleci/.local/bin/tox -e flake8
-      - run:
-          name: Python 2.7 tests
-          command: /home/circleci/.local/bin/tox -e py27
-          environment:
-            NO_SUDO_ACCESS: True
+          name: run unittests
+          command: |
+            ~/.local/bin/pytest \
+               --cov fabric_plugin --cov-report term-missing \
+              --junitxml=test-results/fabric_plugin.xml \
+              fabric_plugin/tests
+      - store_test_results:
+          path: test-results
 
   wagon:
     docker:
@@ -82,6 +84,7 @@ workflows:
   version: 2
   tests:
     jobs:
+      - flake8
       - unittests
       - wagon:
           filters:

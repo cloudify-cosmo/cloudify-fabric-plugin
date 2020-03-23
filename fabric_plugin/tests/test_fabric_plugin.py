@@ -131,15 +131,17 @@ class FabricPluginTest(BaseFabricPluginTest):
     def test_missing_module_task_attribute(self):
         with self.assertRaisesRegexp(NonRecoverableError,
                                      "Could not find 'whoami' in fabric_"):
-            self._execute('test.run_module_task',
-                          task_mapping='fabric_plugin.tests.tests.whoami')
+            self._execute(
+                'test.run_module_task',
+                task_mapping='fabric_plugin.tests.test_fabric_plugin.whoami')
 
     def test_non_callable_module_task(self):
         with self.assertRaisesRegexp(NonRecoverableError,
                                      "is not callable"):
             self._execute(
                 'test.run_module_task',
-                task_mapping='fabric_plugin.tests.tests.non_callable')
+                task_mapping='fabric_plugin.tests.'
+                             'test_fabric_plugin.non_callable')
 
     def test_conn_kwargs(self):
         self._execute('test.run_task', task_name='task')
@@ -163,8 +165,9 @@ class FabricPluginTest(BaseFabricPluginTest):
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_run_module_task(self):
-        self._execute('test.run_module_task',
-                      task_mapping='fabric_plugin.tests.tests.module_task')
+        self._execute(
+            'test.run_module_task',
+            task_mapping='fabric_plugin.tests.test_fabric_plugin.module_task')
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
