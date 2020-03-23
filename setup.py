@@ -24,9 +24,7 @@ setup(
     license='LICENSE',
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
-        'cloudify-common>=4.4.0',
-        'paramiko>=1.18.3',
-        'fabric>=1.13.1,<2.0', # 2+ branch has API changes
-        'six>=1.8.0',
+        'cloudify-common>=5.0.0',
+        'fabric==2.5.0',
     ]
 )
