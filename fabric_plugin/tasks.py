@@ -93,7 +93,7 @@ def ssh_connection(ctx, fabric_env):
 
 
 @operation(resumable=True)
-def run_task(tasks_file, task_name, fabric_env=None,
+def run_task(ctx, tasks_file, task_name, fabric_env=None,
              task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric task loaded from 'tasks_file'
 
@@ -105,11 +105,11 @@ def run_task(tasks_file, task_name, fabric_env=None,
     """
     task = _get_task(tasks_file, task_name)
     ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
-    return _run_task(task, task_properties, fabric_env, hide_output)
+    return _run_task(ctx, task, task_properties, fabric_env, hide_output)
 
 
 @operation(resumable=True)
-def run_module_task(task_mapping, fabric_env=None,
+def run_module_task(ctx, task_mapping, fabric_env=None,
                     task_properties=None, hide_output=None, **kwargs):
     """Runs the specified fabric module task specified by mapping'
 
@@ -120,15 +120,13 @@ def run_module_task(task_mapping, fabric_env=None,
     """
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('Running task: {0}'.format(task_mapping))
-    return _run_task(task, task_properties, fabric_env, hide_output)
+    return _run_task(ctx, task, task_properties, fabric_env, hide_output)
 
 
-def _run_task(task, task_properties, fabric_env, hide_output):
-    with fabric_api.settings(
-            _hide_output(groups=hide_output),
-            **_fabric_env(fabric_env, warn_only=False)):
+def _run_task(ctx, task, task_properties, fabric_env, hide_output):
+    with ssh_connection(ctx, fabric_env) as conn:
         task_properties = task_properties or {}
-        return task(**task_properties)
+        return task(conn, **task_properties)
 
 
 @operation(resumable=True)
