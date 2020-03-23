@@ -19,15 +19,18 @@ import tempfile
 import posixpath
 import importlib
 
+from functools import wraps
 from contextlib import contextmanager
 
 import requests
-from fabric import Connection
+from fabric import Connection, task
+from invoke import Task
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
 from cloudify import utils
 from cloudify import exceptions
+from cloudify._compat import exec_
 from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
@@ -94,9 +97,9 @@ def run_task(ctx, tasks_file, task_name, fabric_env=None,
     :param task_properties: optional properties to pass on to the task
                             as invocation kwargs
     """
-    task = _get_task(tasks_file, task_name)
+    func = _get_task(tasks_file, task_name)
     ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
-    return _run_task(ctx, task, task_properties, fabric_env)
+    return _run_task(ctx, func, task_properties, fabric_env)
 
 
 @operation(resumable=True)
@@ -411,17 +414,17 @@ def _get_task_from_mapping(mapping):
             "Could not load '{0}' ({1}: {2})".format(module_name,
                                                      type(e).__name__, e))
     try:
-        task = getattr(module, task_name)
+        func = getattr(module, task_name)
     except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not find '{0}' in {1} ({2}: {3})"
             .format(task_name, module_name,
                     type(e).__name__, e))
-    if not callable(task):
+    if not callable(func):
         raise exceptions.NonRecoverableError(
             "'{0}' in '{1}' is not callable"
             .format(task_name, module_name))
-    return task
+    return _normalize_task_func(func)
 
 
 def _get_task(tasks_file, task_name):
@@ -434,18 +437,28 @@ def _get_task(tasks_file, task_name):
                                                     type(e).__name__, e))
     exec_globs = exec_env.exec_globals(tasks_file)
     try:
-        exec(tasks_code, {}, exec_globs)
+        exec_(tasks_code, exec_globs)
     except Exception as e:
         raise exceptions.NonRecoverableError(
             "Could not load '{0}' ({1}: {2})".format(tasks_file,
                                                      type(e).__name__, e))
-    task = exec_globs.get(task_name)
-    if not task:
+    func = exec_globs.get(task_name)
+    if not func:
         raise exceptions.NonRecoverableError(
             "Could not find task '{0}' in '{1}'"
             .format(task_name, tasks_file))
-    if not callable(task):
+    if not callable(func):
         raise exceptions.NonRecoverableError(
             "'{0}' in '{1}' is not callable"
             .format(task_name, tasks_file))
-    return task
+    return _normalize_task_func(func)
+
+
+def _normalize_task_func(func):
+    if not isinstance(func, Task):
+        @task
+        @wraps(func)
+        def _inner(conn, *args, **kwargs):
+            return func(*args, **kwargs)
+        return _inner
+    return func
