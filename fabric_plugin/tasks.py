@@ -19,7 +19,6 @@ import tempfile
 import posixpath
 import importlib
 
-from StringIO import StringIO
 from contextlib import contextmanager
 
 import requests
@@ -38,7 +37,6 @@ from cloudify.exceptions import NonRecoverableError
 from fabric_plugin import exec_env
 
 from cloudify.proxy.client import ScriptException
-
 
 
 ILLEGAL_CTX_OPERATION_ERROR = RuntimeError('ctx may only abort or return once')
@@ -318,7 +316,7 @@ def run_script(ctx,
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
 
-        with _make_proxy(ctx, ctx_server_port) as proxy,
+        with _make_proxy(ctx, ctx_server_port) as proxy, \
                 conn.forward_remote(proxy.port):
             env['PATH'] = '{0}:$PATH'.format(files.base_dir)
             env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(files.base_dir)
