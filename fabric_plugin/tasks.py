@@ -43,37 +43,42 @@ ILLEGAL_CTX_OPERATION_ERROR = RuntimeError('ctx may only abort or return once')
 DEFAULT_BASE_SUBDIR = 'cloudify-ctx'
 
 FABRIC_ENV_DEFAULTS = {
-    'connection_attempts': 5,
-    'timeout': 10,
-    'forward_agent': False,
-    'abort_on_prompts': True,
-    'keepalive': 0,
-    'linewise': False,
-    'pool_size': 0,
-    'skip_bad_hosts': False,
-    'status': False,
-    'disable_known_hosts': True,
-    'combine_stderr': True,
+    'connect_timeout': 10,
+    'port': 22,
 }
 
 
 @contextmanager
 def ssh_connection(ctx, fabric_env):
-    host = fabric_env.get('host_string') or ctx.instance.host_ip
-    user = fabric_env.get('user') or ctx.bootstrap_context.cloudify_agent.user
+    for name, value in FABRIC_ENV_DEFAULTS.items():
+        fabric_env.setdefault(name, value)
+
+    if 'host' not in fabric_env:
+        if 'host_string' in fabric_env:
+            fabric_env['host'] = fabric_env.pop('host_string')
+        else:
+            fabric_env['host'] = ctx.instance.host_ip
+
+    if 'user' not in fabric_env:
+        fabric_env['user'] = ctx.bootstrap_context.cloudify_agent.user
+        if not fabric_env['user']:
+            raise NonRecoverableError('ssh user definition missing')
+
     connect_kwargs = {}
     if 'key' in fabric_env:
-        connect_kwargs['key'] = fabric_env['key']
-    if 'key_filename' in fabric_env:
-        connect_kwargs['key_filename'] = fabric_env['key_filename']
-    if 'password' in fabric_env:
-        connect_kwargs['password'] = fabric_env['password']
-    conn = Connection(
-        host=host,
-        user=user,
-        connect_kwargs=connect_kwargs or None,
-        port=fabric_env.get('port') or 22
-    )
+        connect_kwargs['key'] = fabric_env.pop('key')
+    elif 'key_filename' in fabric_env:
+        connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
+    elif 'password' in fabric_env:
+        connect_kwargs['password'] = fabric_env.pop('password')
+    elif ctx.bootstrap_context.cloudify_agent.agent_key_path:
+        connect_kwargs['key_filename'] = \
+            ctx.bootstrap_context.cloudify_agent.agent_key_path
+    else:
+        raise NonRecoverableError('key_filename/key or password missing')
+    fabric_env['connect_kwargs'] = connect_kwargs
+
+    conn = Connection(**fabric_env)
     conn.open()
     yield conn
 
