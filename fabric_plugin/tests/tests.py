@@ -19,14 +19,11 @@ import getpass
 import unittest
 import tempfile
 import posixpath
-import contextlib
 from StringIO import StringIO
 from collections import namedtuple
 
-from mock import patch
-from fabric import api
-from fabric.contrib import files
-from fabric import context_managers
+from invoke import Context
+from mock import patch, MagicMock, Mock
 
 from cloudify import ctx
 from cloudify.workflows import local
@@ -56,79 +53,14 @@ class TestException(Exception):
 
 
 class BaseFabricPluginTest(unittest.TestCase):
-
-    class MockCommandResult(str):
-
-        def __init__(self, failed):
-            str.__init__(self)
-            self.failed = failed
-            self.stdout = 'mock_stdout'
-            self.stderr = 'mock_stderr'
-            self.command = 'mock_command'
-            self.return_code = 1
-
-    class MockFabricApi(object):
-
-        def __init__(self):
-            self.commands = []
-            self.settings_merged = {}
-
-        @contextlib.contextmanager
-        def settings(self, *args, **kwargs):
-            self.settings_merged.update(kwargs)
-            if args:
-                groups = args[0]
-                self.settings_merged.update({'hide_output': groups})
-            yield
-
-        def run(self, command):
-            self.commands.append(command)
-            self.settings_merged['use_sudo'] = False
-            return BaseFabricPluginTest.MockCommandResult(
-                command == 'fail')
-
-        def sudo(self, command):
-            self.commands.append(command)
-            self.settings_merged['use_sudo'] = True
-            return BaseFabricPluginTest.MockCommandResult(
-                command == 'fail')
-
-        def hide(self, *groups):
-            return groups
-
-        def exists(self, path):
-            """Allows to return the settings in the `run_script`
-            execution method.
-
-            The first thing we do in the `run_script` function
-            is check if a path exists. Since we can't really
-            execute it as it requires a host, this will return
-            the settings for us to check.
-            """
-            raise TestException(self.settings_merged)
-
     def setUp(self):
         self.default_fabric_env = {
             'host_string': 'test',
             'user': 'test',
             'key_filename': 'test',
         }
-        self.original_fabric_api = tasks.fabric_api
-        self.original_bootstrap_context = LocalEndpoint.get_bootstrap_context
-        self.mock = self.MockFabricApi()
-        tasks.fabric_api = self.mock
         self.bootstrap_context = {}
-        outer = self
-
-        def mock_get_bootstrap_context(self):
-            return outer.bootstrap_context
-
-        LocalEndpoint.get_bootstrap_context = mock_get_bootstrap_context
-        self.addCleanup(self.cleanup)
-
-    def cleanup(self):
-        tasks.fabric_api = self.original_fabric_api
-        LocalEndpoint.get_bootstrap_context = self.original_bootstrap_context
+        LocalEndpoint.get_bootstrap_context = lambda _: self.bootstrap_context
 
     def _execute(self,
                  operation,
@@ -168,89 +100,96 @@ class BaseFabricPluginTest(unittest.TestCase):
         self.env = local.init_env(blueprint_path,
                                   name=self._testMethodName,
                                   inputs=inputs)
-        result = self.env.execute('execute_operation',
-                                  parameters={'operation': operation},
-                                  task_retry_interval=0,
-                                  task_retries=0)
-        return result, self.env
+
+        self.conn = MockConnection()
+        self.conn_factory = Mock(return_value=self.conn)
+        with patch('fabric_plugin.tasks.Connection', self.conn_factory):
+            result = self.env.execute('execute_operation',
+                                      parameters={'operation': operation},
+                                      task_retry_interval=0,
+                                      task_retries=0)
+        return result
+
+
+class MockConnection(MagicMock, Context):
+    def __init__(self, **kw):
+        super(MockConnection, self).__init__()
+        self.run = Mock()
+        self.sudo = Mock()
+
+    @property
+    def cwd(self):
+        return '/'
 
 
 class FabricPluginTest(BaseFabricPluginTest):
+    def _get_conn_kwargs(self):
+        return self.conn_factory.mock_calls[-1].kwargs
 
     def test_missing_tasks_file(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "Could not get 'missing.py'"):
             self._execute('test.run_task', tasks_file='missing.py')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("Could not get 'missing.py'", str(e))
 
     def test_bad_tasks_file(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "ImportError: No module named module"):
             self._execute('test.run_task', tasks_file='corrupted_file.py')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("Could not load 'corrupted_file.py'", str(e))
-            self.assertIn("ImportError: No module named module", str(e))
 
     def test_missing_task(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "Could not find task 'missing'"):
             self._execute('test.run_task', task_name='missing')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("Could not find task", str(e))
-            self.assertIn('missing', str(e))
-            self.assertIn('fabric_tasks.py', str(e))
 
     def test_non_callable_task(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "is not callable"):
             self._execute('test.run_task', task_name='non_callable')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn('not callable', str(e))
-            self.assertIn('non_callable', str(e))
-            self.assertIn('fabric_tasks.py', str(e))
 
     def test_missing_tasks_module(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "Could not load 'module_that"):
             self._execute('test.run_module_task',
                           task_mapping='module_that_does_not_exist.some_task')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("Could not load 'module_that", str(e))
 
     def test_missing_module_task_attribute(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "Could not find 'whoami' in fabric_"):
             self._execute('test.run_module_task',
                           task_mapping='fabric_plugin.tests.tests.whoami')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("Could not find 'whoami' in fabric_", str(e))
 
     def test_non_callable_module_task(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "is not callable"):
             self._execute(
                 'test.run_module_task',
                 task_mapping='fabric_plugin.tests.tests.non_callable')
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn("'non_callable' in 'fabric_", str(e))
-            self.assertIn('not callable', str(e))
+
+    def test_conn_kwargs(self):
+        self._execute('test.run_task', task_name='task')
+        kw = self._get_conn_kwargs()
+        self.assertEqual(
+            self.default_fabric_env['user'],
+            kw['user']
+        )
+        self.assertEqual(
+            self.default_fabric_env['key_filename'],
+            kw['connect_kwargs']['key_filename']
+        )
+        self.assertEqual(
+            self.default_fabric_env['host_string'],
+            kw['host']
+        )
 
     def test_run_task(self):
         self._execute('test.run_task', task_name='task')
         instance = self.env.storage.get_node_instances()[0]
-        self.assertDictContainsSubset(self.default_fabric_env,
-                                      self.mock.settings_merged)
-        self.assertFalse(self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_run_module_task(self):
         self._execute('test.run_module_task',
                       task_mapping='fabric_plugin.tests.tests.module_task')
         instance = self.env.storage.get_node_instances()[0]
-        self.assertDictContainsSubset(self.default_fabric_env,
-                                      self.mock.settings_merged)
-        self.assertFalse(self.mock.settings_merged['warn_only'])
         self.assertEqual(instance.runtime_properties['task_called'], 'called')
 
     def test_task_properties(self):
@@ -265,11 +204,14 @@ class FabricPluginTest(BaseFabricPluginTest):
             'test.run_commands',
             commands=commands,
             use_sudo=use_sudo)
-        self.assertDictContainsSubset(self.default_fabric_env,
-                                      self.mock.settings_merged)
-        self.assertTrue(self.mock.settings_merged['warn_only'])
-        self.assertIs(use_sudo, self.mock.settings_merged['use_sudo'])
-        self.assertListEqual(self.mock.commands, commands)
+
+        if use_sudo:
+            mock_calls = self.conn.sudo.mock_calls
+        else:
+            mock_calls = self.conn.run.mock_calls
+
+        mock_commands = [args[0] for c, args, kwargs in mock_calls]
+        self.assertEqual(commands, mock_commands)
 
     def test_run_commands(self):
         self._test_run_commands()
@@ -278,67 +220,73 @@ class FabricPluginTest(BaseFabricPluginTest):
         self._test_run_commands(use_sudo=True)
 
     def test_missing_user(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "ssh user definition missing"):
             self._execute('test.run_task',
                           task_name='task',
                           fabric_env={'password': 'test',
                                       'host_string': 'test'})
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertEqual('ssh user definition missing', str(e))
 
     def test_missing_key_or_password(self):
-        try:
+        with self.assertRaisesRegexp(NonRecoverableError,
+                                     "key_filename/key or password"):
             self._execute('test.run_task',
                           task_name='task',
                           fabric_env={'user': 'test',
                                       'host_string': 'test'})
-            self.fail()
-        except NonRecoverableError as e:
-            self.assertIn('key_filename/key or password', str(e))
 
     def test_fabric_env_default_override(self):
         # first sanity for no override
-        self._execute('test.run_task',
-                      task_name='task')
-        self.assertEqual(self.mock.settings_merged['timeout'],
-                         tasks.FABRIC_ENV_DEFAULTS['timeout'])
+        self._execute('test.run_task', task_name='task')
+        kw = self._get_conn_kwargs()
+        self.assertEqual(
+            kw['connect_timeout'],
+            tasks.FABRIC_ENV_DEFAULTS['connect_timeout'])
+
         # now override
         invocation_fabric_env = self.default_fabric_env.copy()
-        invocation_fabric_env['timeout'] = 1000000
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=invocation_fabric_env)
-        self.assertEqual(self.mock.settings_merged['timeout'], 1000000)
+        invocation_fabric_env['connect_timeout'] = 1000000
+        self._execute(
+            'test.run_task',
+            task_name='task',
+            fabric_env=invocation_fabric_env)
+        kw = self._get_conn_kwargs()
+        self.assertEqual(kw['connect_timeout'], 1000000)
 
     def test_implicit_host_string(self):
         fabric_env = self.default_fabric_env.copy()
         del fabric_env['host_string']
-        self._execute('test.run_task',
-                      task_name='test_implicit_host_string',
-                      ip='1.1.1.1',
-                      fabric_env=fabric_env)
+        self._execute(
+            'test.run_task',
+            task_name='test_implicit_host_string',
+            ip='1.1.1.1',
+            fabric_env=fabric_env)
+        kw = self._get_conn_kwargs()
         instance = self.env.storage.get_node_instances()[0]
         self.assertEqual(instance.runtime_properties['expected_host_string'],
-                         self.mock.settings_merged['host_string'])
+                         kw['host'])
 
     def test_explicit_host_string(self):
         fabric_env = self.default_fabric_env.copy()
         fabric_env['host_string'] = 'explicit_host_string'
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env)
+        self._execute(
+            'test.run_task',
+            task_name='task',
+            fabric_env=fabric_env)
+        kw = self._get_conn_kwargs()
         self.assertEqual('explicit_host_string',
-                         self.mock.settings_merged['host_string'])
+                         kw['host'])
 
     def test_explicit_password(self):
         fabric_env = self.default_fabric_env.copy()
         fabric_env['password'] = 'explicit_password'
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env)
+        self._execute(
+            'test.run_task',
+            task_name='task',
+            fabric_env=fabric_env)
+        kw = self._get_conn_kwargs()
         self.assertEqual('explicit_password',
-                         self.mock.settings_merged['password'])
+                         kw['password'])
 
     def test_implicit_key_filename(self):
         fabric_env = self.default_fabric_env.copy()
@@ -348,21 +296,25 @@ class FabricPluginTest(BaseFabricPluginTest):
                 'agent_key_path': 'implicit_key_filename'
             }
         }
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env,
-                      bootstrap_context=bootstrap_context)
+        self._execute(
+            'test.run_task',
+            task_name='task',
+            fabric_env=fabric_env,
+            bootstrap_context=bootstrap_context)
+        kw = self._get_conn_kwargs()
         self.assertEqual('implicit_key_filename',
-                         self.mock.settings_merged['key_filename'])
+                         kw['connect_kwargs']['key_filename'])
 
     def test_explicit_key_filename(self):
         fabric_env = self.default_fabric_env.copy()
         fabric_env['key_filename'] = 'explicit_key_filename'
-        self._execute('test.run_task',
-                      task_name='task',
-                      fabric_env=fabric_env)
+        self._execute(
+            'test.run_task',
+            task_name='task',
+            fabric_env=fabric_env)
+        kw = self._get_conn_kwargs()
         self.assertEqual('explicit_key_filename',
-                         self.mock.settings_merged['key_filename'])
+                         kw['connect_kwargs']['key_filename'])
 
     def test_explicit_key(self):
         fabric_env = self.default_fabric_env.copy()
@@ -370,8 +322,9 @@ class FabricPluginTest(BaseFabricPluginTest):
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
+        kw = self._get_conn_kwargs()
         self.assertEqual('explicit_key_content',
-                         self.mock.settings_merged['key'])
+                         kw['connect_kwargs']['key'])
 
     def test_env_var_key_filename(self):
         with patch.dict(os.environ, {
@@ -393,8 +346,8 @@ class FabricPluginTest(BaseFabricPluginTest):
                       task_name='task',
                       fabric_env=fabric_env,
                       bootstrap_context=bootstrap_context)
-        self.assertEqual('implicit_user',
-                         self.mock.settings_merged['user'])
+        kw = self._get_conn_kwargs()
+        self.assertEqual('implicit_user', kw['user'])
 
     def test_explicit_user(self):
         fabric_env = self.default_fabric_env.copy()
@@ -402,21 +355,21 @@ class FabricPluginTest(BaseFabricPluginTest):
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
-        self.assertEqual('explicit_user',
-                         self.mock.settings_merged['user'])
+        kw = self._get_conn_kwargs()
+        self.assertEqual('explicit_user', kw['user'])
 
     def test_override_warn_only(self):
         fabric_env = self.default_fabric_env.copy()
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
-        self.assertFalse(self.mock.settings_merged['warn_only'])
+        self.assertFalse(self._get_conn_kwargs()['warn_only'])
         fabric_env = self.default_fabric_env.copy()
         fabric_env['warn_only'] = True
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
-        self.assertTrue(self.mock.settings_merged['warn_only'])
+        self.assertTrue(self._get_conn_kwargs()['warn_only'])
 
     def test_failed_command(self):
         commands = ['fail']
