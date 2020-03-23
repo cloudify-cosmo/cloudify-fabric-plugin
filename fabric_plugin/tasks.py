@@ -53,6 +53,15 @@ FABRIC_ENV_DEFAULTS = {
 
 @contextmanager
 def ssh_connection(ctx, fabric_env):
+    """Make and establish a fabric ssh connection.
+
+    :param ctx: cloudify operation context
+    :param fabric_env: dict containing fabric connection details, with
+        keys such as: host/host_string, user, key/key_filename/password,
+        connect_timeout, port
+
+    :return: a fabric.Connection instance
+    """
     for name, value in FABRIC_ENV_DEFAULTS.items():
         fabric_env.setdefault(name, value)
 
@@ -142,11 +151,16 @@ def run_commands(ctx,
 
 
 class _FabricCtx(object):
+    """A Context object for use with the ctx proxy.
+
+    This is used by the proxy, when tasks/scripts use `ctx` calls.
+    """
     def __init__(self, ctx, files):
         self._ctx = ctx
         self._files = files
 
     def __getattr__(self, name):
+        # delegate to the cloudify operationcontext
         return getattr(self._ctx, name)
 
     def download_resource(self, resource_path, target_path=None):
@@ -197,6 +211,7 @@ class _FabricCtx(object):
 
 
 class _RemoteFiles(object):
+    """Helper for uploading files needed to run fabric scripts."""
     def __init__(self, conn, script_path, base_dir=None):
         self._conn = conn
         self._sftp = conn.sftp()
@@ -288,6 +303,7 @@ class _RemoteFiles(object):
 
 @contextmanager
 def _make_proxy(ctx, port):
+    """A Cloudify context proxy, wrapped in a contextmanager"""
     proxy = proxy_server.HTTPCtxProxy(ctx, port=port)
     try:
         yield proxy
@@ -358,8 +374,10 @@ def _log_output(ctx, data, prefix):
     lines = data.split('\n')
     if not lines:
         return
-    if not lines[-1]:
+    if not lines[-1]:  # last line is commonly empty
         lines.pop()
+    # can't use cloudify.utils.OutputConsumer because that isn't compatible
+    # with sockets, only with subprocess pipes
     for line in lines:
         ctx.logger.info('%s%s', prefix, line)
 
@@ -455,6 +473,16 @@ def _get_task(tasks_file, task_name):
 
 
 def _normalize_task_func(func):
+    """Adapt the given func to be a fabric Task.
+
+    Fabric tasks (in fabric 2.x) get the ssh connection instance as
+    the first argument. For compatibility with existing tasks, if
+    the function is not already decorated with @task, let's skip that
+    first argument.
+
+    For new tasks, the user should decorate their task with @task,
+    which will make it receive the ssh connection as the first argument.
+    """
     if not isinstance(func, Task):
         @task
         @wraps(func)
