@@ -56,11 +56,6 @@ FABRIC_ENV_DEFAULTS = {
     'combine_stderr': True,
 }
 
-# Very low level workaround used to support manager recovery
-# that is executed on a client different than the one used
-# to bootstrap
-CLOUDIFY_MANAGER_PRIVATE_KEY_PATH = 'CLOUDIFY_MANAGER_PRIVATE_KEY_PATH'
-
 
 @contextmanager
 def ssh_connection(ctx, fabric_env):
