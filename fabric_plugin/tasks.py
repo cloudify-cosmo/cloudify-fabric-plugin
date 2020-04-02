@@ -52,6 +52,24 @@ FABRIC_ENV_DEFAULTS = {
 }
 
 
+def _load_private_key(key_contents):
+    """Load the private key and return a paramiko PKey subclass.
+
+    :param key_contents: the contents of a keyfile, as a string starting
+        with "---BEGIN"
+    :return: A paramiko PKey subclass - RSA, ECDSA or Ed25519
+    """
+    for cls in (RSAKey, ECDSAKey, Ed25519Key):
+        try:
+            return cls.from_private_key(StringIO(key_contents))
+        except SSHException:
+            continue
+    raise NonRecoverableError(
+        'Could not load the private key as an '
+        'RSA, ECDSA, or Ed25519 key'
+    )
+
+
 @contextmanager
 def ssh_connection(ctx, fabric_env):
     """Make and establish a fabric ssh connection.
@@ -79,20 +97,7 @@ def ssh_connection(ctx, fabric_env):
 
     connect_kwargs = {}
     if 'key' in fabric_env:
-        key = fabric_env.pop('key')
-        for cls in (RSAKey, ECDSAKey, Ed25519Key):
-            try:
-                connect_kwargs['pkey'] = cls.from_private_key(StringIO(key))
-            except SSHException:
-                continue
-            else:
-                break
-        else:
-            raise NonRecoverableError(
-                'Could not load the private key as an '
-                'RSA, ECDSA, or Ed25519 key'
-            )
-
+        connect_kwargs['pkey'] = _load_private_key(fabric_env.pop('key'))
     elif 'key_filename' in fabric_env:
         connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
     elif 'password' in fabric_env:
