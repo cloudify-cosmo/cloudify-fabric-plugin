@@ -25,7 +25,7 @@ from contextlib import contextmanager
 import requests
 from fabric import Connection, task
 from invoke import Task
-from paramiko import RSAKey
+from paramiko import RSAKey, ECDSAKey, Ed25519Key, SSHException
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
@@ -79,8 +79,20 @@ def ssh_connection(ctx, fabric_env):
 
     connect_kwargs = {}
     if 'key' in fabric_env:
-        connect_kwargs['pkey'] = \
-            RSAKey.from_private_key(StringIO(fabric_env.pop('key')))
+        key = fabric_env.pop('key')
+        for cls in (RSAKey, ECDSAKey, Ed25519Key):
+            try:
+                connect_kwargs['pkey'] = cls.from_private_key(StringIO(key))
+            except SSHException:
+                continue
+            else:
+                break
+        else:
+            raise NonRecoverableError(
+                'Could not load the private key as an '
+                'RSA, ECDSA, or Ed25519 key'
+            )
+
     elif 'key_filename' in fabric_env:
         connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
     elif 'password' in fabric_env:
