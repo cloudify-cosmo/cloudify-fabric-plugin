@@ -16,9 +16,11 @@ import os
 import unittest
 
 from invoke import Context
+from paramiko import RSAKey
 from mock import patch, MagicMock, Mock
 
 from cloudify import ctx
+from cloudify._compat import StringIO
 from cloudify.workflows import local
 from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
@@ -295,13 +297,15 @@ class FabricPluginTest(BaseFabricPluginTest):
 
     def test_explicit_key(self):
         fabric_env = self.default_fabric_env.copy()
-        fabric_env['key'] = 'explicit_key_content'
+        key_file = StringIO()
+        RSAKey.generate(2048).write_private_key(key_file)
+        key_file.seek(0)
+        fabric_env['key'] = key_file.read()
         self._execute('test.run_task',
                       task_name='task',
                       fabric_env=fabric_env)
         kw = self._get_conn_kwargs()
-        self.assertEqual('explicit_key_content',
-                         kw['connect_kwargs']['key'])
+        self.assertIsInstance(kw['connect_kwargs']['pkey'], RSAKey)
 
     def test_implicit_user(self):
         fabric_env = self.default_fabric_env.copy()

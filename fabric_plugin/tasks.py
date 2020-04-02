@@ -25,12 +25,13 @@ from contextlib import contextmanager
 import requests
 from fabric import Connection, task
 from invoke import Task
+from paramiko import RSAKey, ECDSAKey, Ed25519Key, SSHException
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
 from cloudify import utils
 from cloudify import exceptions
-from cloudify._compat import exec_
+from cloudify._compat import exec_, StringIO
 from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
@@ -49,6 +50,24 @@ FABRIC_ENV_DEFAULTS = {
     'connect_timeout': 10,
     'port': 22,
 }
+
+
+def _load_private_key(key_contents):
+    """Load the private key and return a paramiko PKey subclass.
+
+    :param key_contents: the contents of a keyfile, as a string starting
+        with "---BEGIN"
+    :return: A paramiko PKey subclass - RSA, ECDSA or Ed25519
+    """
+    for cls in (RSAKey, ECDSAKey, Ed25519Key):
+        try:
+            return cls.from_private_key(StringIO(key_contents))
+        except SSHException:
+            continue
+    raise NonRecoverableError(
+        'Could not load the private key as an '
+        'RSA, ECDSA, or Ed25519 key'
+    )
 
 
 @contextmanager
@@ -78,7 +97,7 @@ def ssh_connection(ctx, fabric_env):
 
     connect_kwargs = {}
     if 'key' in fabric_env:
-        connect_kwargs['key'] = fabric_env.pop('key')
+        connect_kwargs['pkey'] = _load_private_key(fabric_env.pop('key'))
     elif 'key_filename' in fabric_env:
         connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
     elif 'password' in fabric_env:
