@@ -305,8 +305,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                       task_name='task',
                       fabric_env=fabric_env)
         kw = self._get_conn_kwargs()
-        self.assertEqual('explicit_key_content',
-                         kw['connect_kwargs']['key'])
+        self.assertIsInstance(kw['connect_kwargs']['pkey'], RSAKey)
 
     def test_implicit_user(self):
         fabric_env = self.default_fabric_env.copy()
