@@ -25,12 +25,13 @@ from contextlib import contextmanager
 import requests
 from fabric import Connection, task
 from invoke import Task
+from paramiko import RSAKey
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
 from cloudify import utils
 from cloudify import exceptions
-from cloudify._compat import exec_
+from cloudify._compat import exec_, StringIO
 from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
@@ -78,7 +79,8 @@ def ssh_connection(ctx, fabric_env):
 
     connect_kwargs = {}
     if 'key' in fabric_env:
-        connect_kwargs['key'] = fabric_env.pop('key')
+        connect_kwargs['pkey'] = \
+            RSAKey.from_private_key(StringIO(fabric_env.pop('key')))
     elif 'key_filename' in fabric_env:
         connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
     elif 'password' in fabric_env:
