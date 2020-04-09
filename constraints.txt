@@ -1,4 +1,0 @@
-git+https://github.com/cloudify-cosmo/cloudify-common@master#egg=cloudify-common==master
-paramiko==2.7.1
-fabric==2.5.0
-six==1.14.0
