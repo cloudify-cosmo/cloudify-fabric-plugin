@@ -1,4 +1,0 @@
-cloudify-common==4.4
-paramiko==2.7.1
-fabric==1.14.1
-six==1.14.0

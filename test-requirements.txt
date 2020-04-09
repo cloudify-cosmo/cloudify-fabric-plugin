@@ -1,0 +1,4 @@
+git+https://github.com/cloudify-cosmo/cloudify-common@master#egg=cloudify-common==master
+mock
+pytest
+pytest-cov

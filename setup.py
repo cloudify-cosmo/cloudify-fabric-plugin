@@ -24,7 +24,7 @@ setup(
     license='LICENSE',
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
-        'cloudify-common>=5.0.0',
+        'cloudify-common>=5.1.0.dev1',
         'fabric==2.5.0',
     ]
 )
