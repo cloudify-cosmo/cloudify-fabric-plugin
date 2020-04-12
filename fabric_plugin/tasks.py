@@ -70,6 +70,25 @@ def _load_private_key(key_contents):
     )
 
 
+def _check_python_version(run_func):
+    def _which_python():
+        try:
+            # This is usually reference to python2 and it could reference to
+            # python3 if `alternatives mechanism used to enable the
+            # unversioned python`
+            py_version = run_func(
+                'python -c \'import sys; print(sys.version_info[0])\''
+            ).stdout
+        except Exception:
+            py_version = '3'
+            py_path = run_func('which python3').stdout.rstrip()
+        else:
+            py_path = run_func('which python').stdout.rstrip()
+        return py_version, py_path
+
+    return _which_python()
+
+
 @contextmanager
 def ssh_connection(ctx, fabric_env):
     """Make and establish a fabric ssh connection.
@@ -273,6 +292,10 @@ class _RemoteFiles(object):
             remote_path_suffix)
         self._sftp.put(script_path, self.remote_script_path)
 
+    @staticmethod
+    def is_py_script(script_path):
+        return True if script_path.endswith('.py') else False
+
     def upload_env_script(self, env):
         with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
             env_script.write('chmod +x {0}\n'.format(self.remote_script_path))
@@ -351,8 +374,16 @@ def run_script(ctx,
 
     with ssh_connection(ctx, fabric_env) as conn, \
             _RemoteFiles(conn, process.get('base_dir')) as files:
+        run = conn.sudo if use_sudo else conn.run
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
+
+        # handle execution python scripts
+        python_prefix = None
+        if files.is_py_script(local_script_path):
+            py_version, py_path = _check_python_version(run)
+            if py_version == '3':
+                python_prefix = py_path
 
         with _make_proxy(ctx, ctx_server_port) as proxy, \
                 conn.forward_remote(proxy.port):
@@ -368,9 +399,12 @@ def run_script(ctx,
             env[CTX_SOCKET_URL] = proxy.socket_url
             env['LOCAL_{0}'.format(CTX_SOCKET_URL)] = proxy.socket_url
             files.upload_env_script(env)
-            command = 'cd {0} && source {1} && {2}'.format(
-                cwd, files.remote_env_script_path, command)
-            run = conn.sudo if use_sudo else conn.run
+            if python_prefix:
+                command = 'cd {0} && source {1} && {2} {3}'.format(
+                    cwd, files.remote_env_script_path, python_prefix, command)
+            else:
+                command = 'cd {0} && source {1} && {2}'.format(
+                    cwd, files.remote_env_script_path, command)
             ctx.logger.info("Running command: %s", command)
             result = run(command, hide=True)
             _log_output(ctx, result.stdout, prefix='<out> ')
