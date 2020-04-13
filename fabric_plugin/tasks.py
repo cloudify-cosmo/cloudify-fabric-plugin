@@ -70,14 +70,6 @@ def _load_private_key(key_contents):
     )
 
 
-def _check_python_version(run_func):
-    try:
-        py_path = run_func('which python').stdout.rstrip()
-    except Exception:
-        py_path = run_func('which python3').stdout.rstrip()
-    return py_path
-
-
 @contextmanager
 def ssh_connection(ctx, fabric_env):
     """Make and establish a fabric ssh connection.
@@ -366,11 +358,6 @@ def run_script(ctx,
         run = conn.sudo if use_sudo else conn.run
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
-
-        py_path = None
-        if files.is_py_script(local_script_path):
-            py_path = _check_python_version(run)
-
         with _make_proxy(ctx, ctx_server_port) as proxy, \
                 conn.forward_remote(proxy.port):
             env['PATH'] = '{0}:$PATH'.format(files.base_dir)
@@ -380,10 +367,12 @@ def run_script(ctx,
             # the #! line.
             if command_prefix:
                 command = '{0} {1}'.format(command_prefix, command)
-            # If this is a python script, then add python executable before
-            # command
-            elif py_path:
-                command = '{0} {1}'.format(py_path, command)
+
+            elif files.is_py_script(local_script_path):
+                env['PYTHONBIN'] = '`[ -z $(which python) ]` ' \
+                                   '&& PYTHONBIN=$(which python)' \
+                                   ' || PYTHONBIN=$(which python3)'
+                command = '{0} {1}'.format('$PYTHONBIN', command)
 
             if args:
                 command = ' '.join([command] + args)
