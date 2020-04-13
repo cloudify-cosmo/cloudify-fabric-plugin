@@ -71,22 +71,11 @@ def _load_private_key(key_contents):
 
 
 def _check_python_version(run_func):
-    def _which_python():
-        try:
-            # This is usually reference to python2 and it could reference to
-            # python3 if `alternatives mechanism used to enable the
-            # unversioned python`
-            py_version = run_func(
-                'python -c \'import sys; print(sys.version_info[0])\''
-            ).stdout
-        except Exception:
-            py_version = '3'
-            py_path = run_func('which python3').stdout.rstrip()
-        else:
-            py_path = run_func('which python').stdout.rstrip()
-        return py_version, py_path
-
-    return _which_python()
+    try:
+        py_path = run_func('which python').stdout.rstrip()
+    except Exception:
+        py_path = run_func('which python3').stdout.rstrip()
+    return py_path
 
 
 @contextmanager
@@ -294,7 +283,7 @@ class _RemoteFiles(object):
 
     @staticmethod
     def is_py_script(script_path):
-        return True if script_path.endswith('.py') else False
+        return script_path.endswith('.py')
 
     def upload_env_script(self, env):
         with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
@@ -378,33 +367,32 @@ def run_script(ctx,
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
 
-        # handle execution python scripts
-        python_prefix = None
+        py_path = None
         if files.is_py_script(local_script_path):
-            py_version, py_path = _check_python_version(run)
-            if py_version == '3':
-                python_prefix = py_path
+            py_path = _check_python_version(run)
 
         with _make_proxy(ctx, ctx_server_port) as proxy, \
                 conn.forward_remote(proxy.port):
             env['PATH'] = '{0}:$PATH'.format(files.base_dir)
             env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(files.base_dir)
-
             command = files.remote_script_path
+            # If command_prefix is set, that means script does not contains
+            # the #! line.
             if command_prefix:
                 command = '{0} {1}'.format(command_prefix, command)
+            # If this is a python script, then add python executable before
+            # command
+            elif py_path:
+                command = '{0} {1}'.format(py_path, command)
+
             if args:
                 command = ' '.join([command] + args)
             cwd = process.get('cwd', files.remote_work_dir)
             env[CTX_SOCKET_URL] = proxy.socket_url
             env['LOCAL_{0}'.format(CTX_SOCKET_URL)] = proxy.socket_url
             files.upload_env_script(env)
-            if python_prefix:
-                command = 'cd {0} && source {1} && {2} {3}'.format(
-                    cwd, files.remote_env_script_path, python_prefix, command)
-            else:
-                command = 'cd {0} && source {1} && {2}'.format(
-                    cwd, files.remote_env_script_path, command)
+            command = 'cd {0} && source {1} && {2}'.format(
+                cwd, files.remote_env_script_path, command)
             ctx.logger.info("Running command: %s", command)
             result = run(command, hide=True)
             _log_output(ctx, result.stdout, prefix='<out> ')
