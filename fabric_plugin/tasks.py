@@ -273,7 +273,6 @@ class _RemoteFiles(object):
             remote_path_suffix)
         self._sftp.put(script_path, self.remote_script_path)
 
-
     def upload_env_script(self, env):
         with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
             env_script.write('chmod +x {0}\n'.format(self.remote_script_path))
