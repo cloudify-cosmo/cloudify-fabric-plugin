@@ -280,27 +280,36 @@ class _RemoteFiles(object):
     def upload_env_script(self, env):
         with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
             env_script.write('chmod +x {0}\n'.format(self.remote_script_path))
-            env_script.write('chmod +x {0}\n'.format(self.remote_ctx_path))
+            env_script.write('chmod +x {0}\n'.format(
+                self.remote_proxy_client_path)
+            )
+            env_script.write('chmod +x {0}\n'.format(
+                self.remote_wrapper_ctx_sh_path)
+            )
             for key, value in env.items():
                 env_script.write('export {0}={1}\n'.format(key, value))
 
     def _upload_ctx(self):
-        self.remote_ctx_path = '{0}/ctx'.format(self.base_dir)
-        self.remote_ctx_sh_path = '{0}/ctx-sh'.format(self.base_dir)
+        self.remote_proxy_client_path = \
+            '{0}/proxy_client'.format(self.base_dir)
+        self.remote_wrapper_ctx_sh_path = '{0}/ctx'.format(self.base_dir)
         self.remote_ctx_py_path = '{0}/cloudify.py'.format(self.base_dir)
         self.remote_work_dir = '{0}/work'.format(self.base_dir)
         self.remote_scripts_dir = '{0}/scripts'.format(self.base_dir)
 
-        if not self.exists(self.remote_ctx_path):
+        if not self.exists(self.remote_proxy_client_path):
             self._sftp.mkdir(self.base_dir)
             self._sftp.mkdir(self.remote_work_dir)
             self._sftp.mkdir(self.remote_scripts_dir)
             self.put(
                 proxy_client.__file__.rstrip('c'),  # strip ".pyc" to ".py"
-                self.remote_ctx_path)
-            self.put(
-                os.path.join(_get_bin_dir(), 'ctx-sh'),
-                self.remote_ctx_sh_path)
+                self.remote_proxy_client_path)
+            with self._sftp.file(self.remote_wrapper_ctx_sh_path,
+                                 'w') as wrapper_script:
+                wrapper_script.write('#!/usr/bin/env bash\n')
+                wrapper_script.write(
+                    '$PYTHONBIN {0}/proxy_client \"$@\"'.format(self.base_dir)
+                )
             self.put(
                 os.path.join(
                     os.path.dirname(cloudify.ctx_wrappers.__file__),
@@ -362,17 +371,16 @@ def run_script(ctx,
                 conn.forward_remote(proxy.port):
             env['PATH'] = '{0}:$PATH'.format(files.base_dir)
             env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(files.base_dir)
+            # This python set in order to execute proxy client on target
+            # system by detecting which python version to run that proxy
+            # client so that it can communicate with the proxy server on the
+            # manager side
+            env['PYTHONBIN'] = '$(command which python ' \
+                               '|| command which python3 ' \
+                               '|| echo "python")'
             command = files.remote_script_path
-            # If command_prefix is set, that means script does not contains
-            # the #! line.
             if command_prefix:
                 command = '{0} {1}'.format(command_prefix, command)
-
-            elif files.is_py_script(local_script_path):
-                env['PYTHONBIN'] = '`[ -z $(which python) ]` ' \
-                                   '&& PYTHONBIN=$(which python)' \
-                                   ' || PYTHONBIN=$(which python3)'
-                command = '{0} {1}'.format('$PYTHONBIN', command)
 
             if args:
                 command = ' '.join([command] + args)
