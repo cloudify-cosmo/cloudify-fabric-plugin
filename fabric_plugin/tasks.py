@@ -273,9 +273,6 @@ class _RemoteFiles(object):
             remote_path_suffix)
         self._sftp.put(script_path, self.remote_script_path)
 
-    @staticmethod
-    def is_py_script(script_path):
-        return script_path.endswith('.py')
 
     def upload_env_script(self, env):
         with self._sftp.file(self.remote_env_script_path, 'w') as env_script:
