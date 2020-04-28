@@ -4,6 +4,6 @@
 plugins:
     fabric:
         executor: central_deployment_agent
-        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.6.0.zip
+        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/1.7.0.zip
         package_name: cloudify-fabric-plugin
-        package_version: '1.6.0'
+        package_version: '1.7.0'
