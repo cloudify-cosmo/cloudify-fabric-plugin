@@ -192,7 +192,8 @@ def run_script(script_path,
         ctx.logger.debug('base_dir set to: {0}'.format(base_dir))
 
         remote_ctx_dir = base_dir
-        remote_ctx_path = '{0}/ctx'.format(remote_ctx_dir)
+        remote_wrapper_ctx_sh_path = '{0}/ctx'.format(remote_ctx_dir)
+        remote_proxy_client_path = '{0}/proxy_client'.format(remote_ctx_dir)
         remote_ctx_sh_path = '{0}/ctx-sh'.format(remote_ctx_dir)
         remote_ctx_py_path = '{0}/cloudify.py'.format(remote_ctx_dir)
         remote_scripts_dir = '{0}/scripts'.format(remote_ctx_dir)
@@ -210,9 +211,15 @@ def run_script(script_path,
         if args:
             command = ' '.join([command] + args)
 
+        wrapper_script = StringIO()
+        wrapper_script.write('#!/usr/bin/env bash\n')
+        wrapper_script.write(
+            '$PYTHONBIN {0} \"$@\"'.format(remote_proxy_client_path)
+        )
+
         # the remote host must have ctx and any related files before
         # running any fabric scripts
-        if not fabric_files.exists(remote_ctx_path):
+        if not fabric_files.exists(remote_proxy_client_path):
             # there may be race conditions with other operations that
             # may be running in parallel, so we pass -p to make sure
             # we get 0 exit code if the directory already exists
@@ -220,8 +227,9 @@ def run_script(script_path,
             fabric_api.run('mkdir -p {0}'.format(remote_work_dir))
             # this file has to be present before using ctx
             fabric_api.put(local_ctx_sh_path, remote_ctx_sh_path)
-            fabric_api.put(proxy_client_path, remote_ctx_path)
+            fabric_api.put(proxy_client_path, remote_proxy_client_path)
             fabric_api.put(local_ctx_py_path, remote_ctx_py_path)
+            fabric_api.put(wrapper_script, remote_wrapper_ctx_sh_path)
 
         actual_ctx = ctx._get_current_object()
 
@@ -313,10 +321,14 @@ def run_script(script_path,
                 return script_result
 
         env_script = StringIO()
+        env['PYTHONBIN'] = '$(command which python ' \
+                           '|| command which python3 ' \
+                           '|| echo "python")'
         env['PATH'] = '{0}:$PATH'.format(remote_ctx_dir)
         env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(remote_ctx_dir)
         env_script.write('chmod +x {0}\n'.format(remote_script_path))
-        env_script.write('chmod +x {0}\n'.format(remote_ctx_path))
+        env_script.write('chmod +x {0}\n'.format(remote_proxy_client_path))
+        env_script.write('chmod +x {0}\n'.format(remote_wrapper_ctx_sh_path))
         fabric_api.put(local_script_path, remote_script_path)
         proxy = proxy_server.HTTPCtxProxy(actual_ctx, port=ctx_server_port)
         try:
