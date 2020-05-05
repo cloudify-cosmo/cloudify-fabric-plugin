@@ -31,7 +31,6 @@ import cloudify.ctx_wrappers
 from cloudify import ctx
 from cloudify import utils
 from cloudify import exceptions
-from cloudify._compat import exec_, StringIO
 from cloudify.decorators import operation
 from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
@@ -39,6 +38,7 @@ from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import exec_env
+from fabric_plugin._compat import exec_, StringIO
 
 from cloudify.proxy.client import ScriptException
 
