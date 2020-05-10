@@ -20,7 +20,6 @@ from paramiko import RSAKey
 from mock import patch, MagicMock, Mock
 
 from cloudify import ctx
-from cloudify._compat import StringIO
 from cloudify.workflows import local
 from cloudify.decorators import workflow
 from cloudify.endpoint import LocalEndpoint
@@ -28,6 +27,7 @@ from cloudify.workflows import ctx as workflow_ctx
 from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import tasks
+from fabric_plugin._compat import StringIO
 
 
 class BaseFabricPluginTest(unittest.TestCase):
