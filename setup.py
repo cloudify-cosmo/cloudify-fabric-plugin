@@ -17,14 +17,14 @@ from setuptools import setup
 
 setup(
     name='cloudify-fabric-plugin',
-    version='2.0.2',
+    version='2.0.3',
     author='Cloudify',
     author_email='hello@cloudify.co',
     packages=['fabric_plugin'],
     license='LICENSE',
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
-        'cloudify-common>=5.1.0.dev1',
+        'cloudify-common>=4.5.5',
         'fabric==2.5.0',
     ]
 )
