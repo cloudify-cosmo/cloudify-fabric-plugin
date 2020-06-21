@@ -176,13 +176,12 @@ jobs:
     steps:
       - checkout
       - generate_py27py36_wagon
-      # - generate_py3_wagon  # TODO: When we have Python3 Manager Integration Test.
 
   rhel_wagon:
     executor: wagon_generator
     steps:
       - checkout
-#      - generate_rhel_py27py36_wagon
+      - generate_rhel_py27py36_wagon
 
   release:
     executor: py27
