@@ -199,11 +199,11 @@ workflows:
       - wagon:
           filters:
             branches:
-              only: /([0-9\.]*\-build|master|dev|replace-wagon-builder-to-py2py3-builder)/
+              only: /([0-9\.]*\-build|master|dev)/
       - rhel_wagon:
           filters:
             branches:
-              only: /([0-9\.]*\-build|master|dev|replace-wagon-builder-to-py2py3-builder)/
+              only: /([0-9\.]*\-build|master|dev)/
       - release:
           filters:
             branches:
@@ -211,5 +211,6 @@ workflows:
           requires:
             - wagon
             - rhel_wagon
-
+            - unittests_py27
+            - unittests_py36
 
