@@ -31,6 +31,7 @@ def exec_(code, globs):
 """)
 
 else:
+    import builtins
     from io import StringIO
     exec_ = getattr(builtins, 'exec')
 

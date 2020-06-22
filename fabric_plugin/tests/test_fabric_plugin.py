@@ -108,8 +108,8 @@ class FabricPluginTest(BaseFabricPluginTest):
             self._execute('test.run_task', tasks_file='missing.py')
 
     def test_bad_tasks_file(self):
-        with self.assertRaisesRegexp(NonRecoverableError,
-                                     "ImportError: No module named module"):
+
+        with self.assertRaisesRegexp(NonRecoverableError, "No module named"):
             self._execute('test.run_task', tasks_file='corrupted_file.py')
 
     def test_missing_task(self):
