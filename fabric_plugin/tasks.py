@@ -23,9 +23,18 @@ from functools import wraps
 from contextlib import contextmanager
 
 import requests
-from fabric import Connection, task
+from fabric2 import Connection, task
 from invoke import Task
-from paramiko import RSAKey, ECDSAKey, Ed25519Key, SSHException
+from paramiko import RSAKey, ECDSAKey, SSHException
+
+''' This is done because on 5.0.5 manager and older we will have
+ 1.X paramiko version'''
+try:
+    from paramiko import Ed25519Key
+
+    PARAMIKO_VERSION = 2
+except ImportError:
+    PARAMIKO_VERSION = 1
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
@@ -59,7 +68,10 @@ def _load_private_key(key_contents):
         with "---BEGIN"
     :return: A paramiko PKey subclass - RSA, ECDSA or Ed25519
     """
-    for cls in (RSAKey, ECDSAKey, Ed25519Key):
+    keys_classes_list = [RSAKey, ECDSAKey]
+    if PARAMIKO_VERSION == 2:
+        keys_classes_list.append(Ed25519Key)
+    for cls in keys_classes_list:
         try:
             return cls.from_private_key(StringIO(key_contents))
         except SSHException:
