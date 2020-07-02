@@ -31,10 +31,9 @@ from paramiko import RSAKey, ECDSAKey, SSHException
 # 1.X paramiko version
 try:
     from paramiko import Ed25519Key
-
-    PARAMIKO_VERSION = 2
+    ED25519_AVAILABLE = True
 except ImportError:
-    PARAMIKO_VERSION = 1
+    ED25519_AVAILABLE = False
 
 import cloudify.ctx_wrappers
 from cloudify import ctx
@@ -69,7 +68,7 @@ def _load_private_key(key_contents):
     :return: A paramiko PKey subclass - RSA, ECDSA or Ed25519
     """
     keys_classes_list = [RSAKey, ECDSAKey]
-    if PARAMIKO_VERSION == 2:
+    if ED25519_AVAILABLE:
         keys_classes_list.append(Ed25519Key)
     for cls in keys_classes_list:
         try:
