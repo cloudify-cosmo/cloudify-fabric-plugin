@@ -27,8 +27,8 @@ from fabric2 import Connection, task
 from invoke import Task
 from paramiko import RSAKey, ECDSAKey, SSHException
 
-''' This is done because on 5.0.5 manager and older we will have
- 1.X paramiko version'''
+# This is done because on 5.0.5 manager and older we will have
+# 1.X paramiko version
 try:
     from paramiko import Ed25519Key
 
