@@ -17,7 +17,7 @@ from setuptools import setup
 
 setup(
     name='cloudify-fabric-plugin',
-    version='2.0.3',
+    version='2.0.4',
     author='Cloudify',
     author_email='hello@cloudify.co',
     packages=['fabric_plugin'],
@@ -25,6 +25,6 @@ setup(
     description='Plugin for remotely running fabric tasks and commands',
     install_requires=[
         'cloudify-common>=4.5.5',
-        'fabric==2.5.0',
+        'fabric2==2.5.0',
     ]
 )
