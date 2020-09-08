@@ -44,6 +44,11 @@ from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
+# This is done for 5.0.5 and older utils backward compatibility
+try:
+    from cloudify.utils import ENV_CFY_EXEC_TEMPDIR
+except ImportError:
+    from cloudify.utils import CFY_EXEC_TEMPDIR_ENVVAR as ENV_CFY_EXEC_TEMPDIR
 
 from fabric_plugin import exec_env
 from fabric_plugin._compat import exec_, StringIO
@@ -334,7 +339,7 @@ class _RemoteFiles(object):
         base_dir = self._conn.run(
             '( [[ -n "${0}" ]] && echo -n ${0} ) || '
             'echo -n $(dirname $(mktemp -u))'.format(
-                utils.ENV_CFY_EXEC_TEMPDIR), hide=True).stdout.strip()
+                ENV_CFY_EXEC_TEMPDIR), hide=True).stdout.strip()
         if not base_dir:
             raise NonRecoverableError('Could not conclude temporary directory')
         return posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
