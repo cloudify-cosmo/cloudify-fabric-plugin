@@ -365,3 +365,10 @@ workflows:
             - validate_version
             - validate_documentation
             - build-bundle
+      - merge_docs:
+          filters:
+            branches:
+              only: /master/
+          requires:
+            - release
+            - validate_documentation
