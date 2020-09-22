@@ -115,12 +115,14 @@ def ssh_connection(ctx, fabric_env):
     if 'key' in fabric_env:
         connect_kwargs['pkey'] = _load_private_key(fabric_env.pop('key'))
     elif 'key_filename' in fabric_env:
-        connect_kwargs['key_filename'] = fabric_env.pop('key_filename')
+        connect_kwargs['key_filename'] = \
+            os.path.expanduser(fabric_env.pop('key_filename'))
     elif 'password' in fabric_env:
         connect_kwargs['password'] = fabric_env.pop('password')
     elif ctx.bootstrap_context.cloudify_agent.agent_key_path:
         connect_kwargs['key_filename'] = \
-            ctx.bootstrap_context.cloudify_agent.agent_key_path
+            os.path.expanduser(
+                ctx.bootstrap_context.cloudify_agent.agent_key_path)
     else:
         raise NonRecoverableError('key_filename/key or password missing')
     fabric_env['connect_kwargs'] = connect_kwargs
