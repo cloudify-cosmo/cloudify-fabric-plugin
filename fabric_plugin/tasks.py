@@ -23,7 +23,12 @@ from functools import wraps
 from contextlib import contextmanager
 
 import requests
-from fabric2 import Connection, task
+from fabric2 import (
+    Connection,
+    task,
+    Config,
+    config as fabric_config
+)
 from invoke import Task
 from paramiko import RSAKey, ECDSAKey, SSHException
 
@@ -62,7 +67,44 @@ DEFAULT_BASE_SUBDIR = 'cloudify-ctx'
 FABRIC_ENV_DEFAULTS = {
     'connect_timeout': 10,
     'port': 22,
+    'always_use_pty': False,
+    'gateway': None,
+    'forward_agent': None,
+    'no_agent': False,
+    'ssh_config_path': None,
+    'sudo_password': None,
+    'password': None,
+    'key_filename': None,
+    'sudo_prompt': '[sudo] password: ',
+    'timeout': 10,
+    'command_timeout': None,
+    'use_ssh_config': False,
+    'warn_only': False,
 }
+
+
+# inspired by fabric 1.x https://github.com/fabric/fabric/blob/1.10/fabric/utils.py#L186 # NOQA
+class _AttributeDict(dict):
+    """
+    Dictionary subclass enabling attribute lookup/assignment of keys/values.
+
+    For example::
+
+        >>> m = _AttributeDict({'foo': 'bar'})
+        >>> m.foo
+        'bar'
+        >>> m.foo = 'not bar'
+        >>> m['foo']
+        'not bar'
+    """
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key)
+
+    def __setattr__(self, key, value):
+        self[key] = value
 
 
 def _load_private_key(key_contents):
@@ -84,6 +126,109 @@ def _load_private_key(key_contents):
         'Could not load the private key as an '
         'RSA, ECDSA, or Ed25519 key'
     )
+
+
+def _resolve_hide_value(groups=None):
+    """
+    Get the proper `hide` value that should be set for running fabric command
+    where the following values are possible for hide values:
+       1. out/stdout
+       2. err/stderr
+       3. both/True
+       4. None
+
+
+    :param groups: list of possible levels that can be passed as `hide_output`
+    for `run_commands` & `run_script` operation for cloudify-fabric-1.x & 2.x
+    plugin
+    :return: str: The hide value value based on groups value
+
+    In all cases, result.stdout & result.stderr are always populated with
+    the command result values. By default, results get printed to console
+    if hide value is not provided
+
+    For example::
+    >>> from fabric import Connection
+    >>> connection = {"host": "127.0.0.1", "user": "centos", "port": 22, "connect_kwargs": {"key_filename":"/home/centos/key.pem"}} # NOQA
+    >>> result = connection.run('uname -s')
+    >>> Linux
+    >>> result.stdout
+    'Linux\n'
+    >>> result.stderr
+    ''
+
+    >>> from fabric import Connection
+    >>> connection = {"host": "127.0.0.1", "user": "centos", "port": 22, "connect_kwargs": {"key_filename":"/home/centos/key.pem"}} # NOQA
+    >>> result = connection.run('uname -s', hide=True)
+    >>> result.stdout
+    'Linux\n'
+    >>> result.stderr
+    ''
+
+    >>> from fabric import Connection
+    >>> connection = {"host": "127.0.0.1", "user": "centos", "port": 22, "connect_kwargs": {"key_filename":"/home/centos/key.pem"}} # NOQA
+    >>> result = connection.run('uname -s', hide="out")
+    >>> result.stdout
+    'Linux\n'
+    >>> result.stderr
+    ''
+    """
+    possible_groups = {
+        'status': 'out',
+        'aborts': 'out',
+        'warnings': 'out',
+        'running': 'out',
+        'user': 'out',
+        'everything': ['out', 'err'],
+        'both': ['out', 'err'],
+        'stdout': 'out',
+        'stderr': 'err',
+        'None': False,
+    }
+    groups = groups or []
+    supported_groups = set()
+    # By default do not hide anything
+    if not groups:
+        return False
+    if any(group not in possible_groups for group in groups):
+        raise NonRecoverableError(
+            '`hide_output` must be a subset of {0} (Provided: {1})'.format(
+                ', '.join(possible_groups), ', '.join(groups)))
+
+    for group in groups:
+        new_group = possible_groups[group]
+        if isinstance(new_group, list):
+            supported_groups.update(new_group)
+        else:
+            supported_groups.add(new_group)
+
+    supported_groups = list(supported_groups)
+    hide_value = True
+    if len(supported_groups) == 1:
+        hide_value = supported_groups[0]
+
+    return hide_value
+
+
+def _hide_or_display_results(hide_value, result):
+    """
+    This method helps to decide if we need to display/hide the results of
+    fabric commands/scripts run on specifec machine
+    :param hide_value: The value that helps to decide how should we display
+    fabric results. The possible values are:
+    1. False --> hide nothing
+    2. True ---> Do not display anything
+    3. out ---> Do not display stdout results
+    4. err ---> Do not display stderr results
+    :param result: Instance of result object
+    """
+    if not hide_value:
+        _log_output(ctx, result.stdout, prefix='<out> ')
+        _log_output(ctx, result.stderr, prefix='<err> ')
+    elif hide_value == "out":
+        _log_output(ctx, result.stderr, prefix='<err> ')
+    elif hide_value == 'err':
+        _log_output(ctx, result.stdout, prefix='<err> ')
 
 
 @contextmanager
@@ -112,24 +257,58 @@ def ssh_connection(ctx, fabric_env):
             raise NonRecoverableError('ssh user definition missing')
 
     connect_kwargs = {}
-    if 'key' in fabric_env:
-        connect_kwargs['pkey'] = _load_private_key(fabric_env.pop('key'))
-    elif 'key_filename' in fabric_env:
+    pkey = fabric_env.get('connect_kwargs', {}).get('pkey')
+    if pkey:
+        fabric_env['connect_kwargs']['pkey'] = _load_private_key(pkey)
+    elif fabric_env.get('key'):
+        connect_kwargs['pkey'] = _load_private_key(fabric_env['key'])
+    elif fabric_env.get('key_filename'):
         connect_kwargs['key_filename'] = \
-            os.path.expanduser(fabric_env.pop('key_filename'))
-    elif 'password' in fabric_env:
-        connect_kwargs['password'] = fabric_env.pop('password')
+            os.path.expanduser(fabric_env['key_filename'])
+    elif fabric_env.get('password'):
+        connect_kwargs['password'] = fabric_env['password']
     elif ctx.bootstrap_context.cloudify_agent.agent_key_path:
         connect_kwargs['key_filename'] = \
             os.path.expanduser(
                 ctx.bootstrap_context.cloudify_agent.agent_key_path)
     else:
         raise NonRecoverableError('key_filename/key or password missing')
-    fabric_env['connect_kwargs'] = connect_kwargs
 
-    conn = Connection(**fabric_env)
-    conn.open()
-    yield conn
+    host = fabric_env.pop('host')
+    # Prepare the fabric2 env inputs if they passed
+    fabric2_env = {}
+    fabric2_env['connect_kwargs'] = fabric_env.setdefault(
+        'connect_kwargs',
+        connect_kwargs
+    )
+    fabric2_env['run'] = fabric_env.setdefault('run', {})
+    fabric2_env['sudo'] = fabric_env.setdefault('sudo', {})
+    fabric2_env['timeouts'] = fabric_env.setdefault('timeouts', {})
+    fabric2_env['user'] = fabric_env.pop('user')
+    overrides = {'overrides':  fabric2_env}
+
+    # Convert fabric 1.x inputs to fabric 2.x
+    fabric_env = _AttributeDict(**fabric_env)
+    config = Config.from_v1(fabric_env, **overrides)
+    if not config["timeouts"].get("command"):
+        config["timeouts"]["command"] = fabric_env.command_timeout
+    if fabric_env.connect_timeout != 10:
+        config["timeouts"]['connect'] = fabric_env.connect_timeout
+    fabric_env = fabric_config.merge_dicts(
+        Config.global_defaults(), config)
+    fabric_env = Config(overrides=fabric_env)
+    fabric_env_config = {
+        'host': host,
+        'user': fabric_env['user'],
+        'port': fabric_env['port'],
+        'config': fabric_env
+    }
+    conn = Connection(**fabric_env_config)
+    try:
+        conn.open()
+        yield conn
+    finally:
+        conn.close()
 
 
 @operation(resumable=True)
@@ -143,6 +322,9 @@ def run_task(ctx, tasks_file, task_name, fabric_env=None,
     :param task_properties: optional properties to pass on to the task
                             as invocation kwargs
     """
+    if kwargs.get('hide_output'):
+        ctx.logger.debug('`hide_output` input is not '
+                         'supported for `run_task` operation')
     func = _get_task(tasks_file, task_name)
     ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
     return _run_task(ctx, func, task_properties, fabric_env)
@@ -158,6 +340,9 @@ def run_module_task(ctx, task_mapping, fabric_env=None,
     :param task_properties: optional properties to pass on to the task
                             as invocation kwargs
     """
+    if kwargs.get('hide_output'):
+        ctx.logger.debug('`hide_output` input is not '
+                         'supported for `run_module_task` operation')
     task = _get_task_from_mapping(task_mapping)
     ctx.logger.info('Running task: {0}'.format(task_mapping))
     return _run_task(ctx, task, task_properties, fabric_env)
@@ -180,11 +365,13 @@ def run_commands(ctx,
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
+    hide_value = _resolve_hide_value(kwargs.get('hide_output'))
     with ssh_connection(ctx, fabric_env) as conn:
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run = conn.sudo if use_sudo else conn.run
-            run(command)
+            result = run(command, hide=hide_value)
+            _hide_or_display_results(hide_value, result)
 
 
 class _FabricCtx(object):
@@ -249,10 +436,11 @@ class _FabricCtx(object):
 
 class _RemoteFiles(object):
     """Helper for uploading files needed to run fabric scripts."""
-    def __init__(self, conn, script_path, base_dir=None):
+    def __init__(self, conn, script_path, base_dir=None, hide_value=False):
         self._conn = conn
         self._sftp = conn.sftp()
         self._script_path = script_path
+        self._hide_value = hide_value
         if base_dir:
             base_dir = posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
         self.base_dir = base_dir
@@ -341,7 +529,7 @@ class _RemoteFiles(object):
         base_dir = self._conn.run(
             '( [[ -n "${0}" ]] && echo -n ${0} ) || '
             'echo -n $(dirname $(mktemp -u))'.format(
-                ENV_CFY_EXEC_TEMPDIR), hide=True).stdout.strip()
+                ENV_CFY_EXEC_TEMPDIR), hide=self._hide_value).stdout.strip()
         if not base_dir:
             raise NonRecoverableError('Could not conclude temporary directory')
         return posixpath.join(base_dir, DEFAULT_BASE_SUBDIR)
@@ -375,9 +563,13 @@ def run_script(ctx,
     env = process.get('env', {})
     args = process.get('args')
     command_prefix = process.get('command_prefix')
-
+    hide_value = _resolve_hide_value(kwargs.get('hide_output'))
     with ssh_connection(ctx, fabric_env) as conn, \
-            _RemoteFiles(conn, process.get('base_dir')) as files:
+            _RemoteFiles(
+                conn,
+                process.get('base_dir'),
+                hide_value=hide_value
+            ) as files:
         run = conn.sudo if use_sudo else conn.run
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
@@ -405,9 +597,8 @@ def run_script(ctx,
             command = 'cd {0} && source {1} && {2}'.format(
                 cwd, files.remote_env_script_path, command)
             ctx.logger.info("Running command: %s", command)
-            result = run(command, hide=True)
-            _log_output(ctx, result.stdout, prefix='<out> ')
-            _log_output(ctx, result.stderr, prefix='<err> ')
+            result = run(command, hide=hide_value)
+            _hide_or_display_results(hide_value, result)
 
         result = getattr(fabric_ctx, '_return_value', None)
         if isinstance(result, ScriptException):

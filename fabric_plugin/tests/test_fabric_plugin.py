@@ -42,6 +42,7 @@ class BaseFabricPluginTest(unittest.TestCase):
 
     def _execute(self,
                  operation,
+                 connection=None,
                  fabric_env=None,
                  task_name=None,
                  tasks_file=None,
@@ -77,7 +78,7 @@ class BaseFabricPluginTest(unittest.TestCase):
                                   name=self._testMethodName,
                                   inputs=inputs)
 
-        self.conn = MockConnection()
+        self.conn = connection or MockConnection()
         self.conn_factory = Mock(return_value=self.conn)
         with patch('fabric_plugin.tasks.Connection', self.conn_factory):
             result = self.env.execute('execute_operation',
@@ -152,7 +153,7 @@ class FabricPluginTest(BaseFabricPluginTest):
         )
         self.assertEqual(
             self.default_fabric_env['key_filename'],
-            kw['connect_kwargs']['key_filename']
+            kw['config']['connect_kwargs']['key_filename']
         )
         self.assertEqual(
             self.default_fabric_env['host_string'],
@@ -179,11 +180,17 @@ class FabricPluginTest(BaseFabricPluginTest):
 
     def _test_run_commands(self, use_sudo=False):
         commands = ['command1', 'command2']
+        connection = MockConnection()
+        run = 'sudo' if use_sudo else 'run'
+        setattr(
+            getattr(connection, run), 'return_value',
+            Mock(stdout='Run command successfully', stderr='')
+        )
         self._execute(
             'test.run_commands',
+            connection=connection,
             commands=commands,
             use_sudo=use_sudo)
-
         if use_sudo:
             mock_calls = self.conn.sudo.mock_calls
         else:
@@ -219,7 +226,7 @@ class FabricPluginTest(BaseFabricPluginTest):
         self._execute('test.run_task', task_name='task')
         kw = self._get_conn_kwargs()
         self.assertEqual(
-            kw['connect_timeout'],
+            kw['config']['timeouts']['connect'],
             tasks.FABRIC_ENV_DEFAULTS['connect_timeout'])
 
         # now override
@@ -230,7 +237,7 @@ class FabricPluginTest(BaseFabricPluginTest):
             task_name='task',
             fabric_env=invocation_fabric_env)
         kw = self._get_conn_kwargs()
-        self.assertEqual(kw['connect_timeout'], 1000000)
+        self.assertEqual(kw['config']['timeouts']['connect'], 1000000)
 
     def test_implicit_host_string(self):
         fabric_env = self.default_fabric_env.copy()
@@ -265,7 +272,7 @@ class FabricPluginTest(BaseFabricPluginTest):
             fabric_env=fabric_env)
         kw = self._get_conn_kwargs()
         self.assertEqual('explicit_password',
-                         kw['password'])
+                         kw['config']['connect_kwargs']['password'])
 
     def test_implicit_key_filename(self):
         fabric_env = self.default_fabric_env.copy()
@@ -282,7 +289,7 @@ class FabricPluginTest(BaseFabricPluginTest):
             bootstrap_context=bootstrap_context)
         kw = self._get_conn_kwargs()
         self.assertEqual('implicit_key_filename',
-                         kw['connect_kwargs']['key_filename'])
+                         kw['config']['connect_kwargs']['key_filename'])
 
     def test_explicit_key_filename(self):
         fabric_env = self.default_fabric_env.copy()
@@ -293,7 +300,7 @@ class FabricPluginTest(BaseFabricPluginTest):
             fabric_env=fabric_env)
         kw = self._get_conn_kwargs()
         self.assertEqual('explicit_key_filename',
-                         kw['connect_kwargs']['key_filename'])
+                         kw['config']['connect_kwargs']['key_filename'])
 
     def test_explicit_key(self):
         fabric_env = self.default_fabric_env.copy()
@@ -305,7 +312,7 @@ class FabricPluginTest(BaseFabricPluginTest):
                       task_name='task',
                       fabric_env=fabric_env)
         kw = self._get_conn_kwargs()
-        self.assertIsInstance(kw['connect_kwargs']['pkey'], RSAKey)
+        self.assertIsInstance(kw['config']['connect_kwargs']['pkey'], RSAKey)
 
     def test_implicit_user(self):
         fabric_env = self.default_fabric_env.copy()
