@@ -54,7 +54,8 @@ class BaseFabricPluginTest(unittest.TestCase):
                  process=None,
                  ip=None,
                  custom_input='value',
-                 use_sudo=False):
+                 use_sudo=False,
+                 non_recoverable_error_exit_codes=None):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
@@ -71,6 +72,8 @@ class BaseFabricPluginTest(unittest.TestCase):
             'script_path': script_path or '',
             'process': process or {},
             'custom_input': custom_input,
+            'non_recoverable_error_exit_codes':
+                non_recoverable_error_exit_codes or [],
         }
         blueprint_path = os.path.join(os.path.dirname(__file__),
                                       'blueprint', 'blueprint.yaml')
@@ -338,6 +341,43 @@ class FabricPluginTest(BaseFabricPluginTest):
         kw = self._get_conn_kwargs()
         self.assertEqual('explicit_user', kw['user'])
 
+    def _test_run_commands_non_recoverable(self, use_sudo=False):
+        with self.assertRaises(NonRecoverableError):
+            commands = ['command1', 'command2']
+            connection = MockConnection()
+            run = 'sudo' if use_sudo else 'run'
+            setattr(
+                getattr(connection, run), 'side_effect',
+                CustomError({'return_code': 1})
+            )
+            self._execute(
+                'test.run_commands',
+                connection=connection,
+                commands=commands,
+                use_sudo=use_sudo,
+                non_recoverable_error_exit_codes=[1, 2])
+
+    def test_run_commands_non_recoverable(self):
+        self._test_run_commands_non_recoverable()
+
+    def test_run_sudo_commands_non_recoverable(self):
+        self._test_run_commands_non_recoverable(use_sudo=True)
+
+    def test_run_task_non_recoverable(self):
+        with self.assertRaises(NonRecoverableError):
+            with patch('fabric_plugin.tasks._run_task', raise_custom_error):
+                self._execute('test.run_task', task_name='task',
+                              non_recoverable_error_exit_codes=[1, 2])
+
+    def test_run_module_task_non_recoverable(self):
+        with self.assertRaises(NonRecoverableError):
+            with patch('fabric_plugin.tasks._run_task', raise_custom_error):
+                self._execute(
+                    'test.run_module_task',
+                    task_mapping='fabric_plugin.tests.test_fabric_plugin'
+                                 '.module_task',
+                    non_recoverable_error_exit_codes=[1, 2])
+
 
 @workflow
 def execute_operation(operation, **kwargs):
@@ -351,3 +391,12 @@ def module_task():
 
 
 non_callable = 1
+
+
+class CustomError(Exception):
+    def __init__(self, result):
+        self.result = tasks._AttributeDict(**result)
+
+
+def raise_custom_error(a, b, c, d):
+    raise CustomError({'return_code': 1})

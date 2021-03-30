@@ -311,7 +311,22 @@ def ssh_connection(ctx, fabric_env):
         conn.close()
 
 
+def handle_fabric_exception(func):
+    @wraps(func)
+    def f(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            exit_codes = kwargs.get('non_recoverable_error_exit_codes', [])
+            if hasattr(e, 'result')\
+                    and e.result.return_code in exit_codes:
+                raise NonRecoverableError(e)
+            raise e
+    return f
+
+
 @operation(resumable=True)
+@handle_fabric_exception
 def run_task(ctx, tasks_file, task_name, fabric_env=None,
              task_properties=None, **kwargs):
     """Runs the specified fabric task loaded from 'tasks_file'
@@ -331,6 +346,7 @@ def run_task(ctx, tasks_file, task_name, fabric_env=None,
 
 
 @operation(resumable=True)
+@handle_fabric_exception
 def run_module_task(ctx, task_mapping, fabric_env=None,
                     task_properties=None, **kwargs):
     """Runs the specified fabric module task specified by mapping'
@@ -355,6 +371,7 @@ def _run_task(ctx, task, task_properties, fabric_env):
 
 
 @operation(resumable=True)
+@handle_fabric_exception
 def run_commands(ctx,
                  commands,
                  fabric_env=None,
@@ -546,6 +563,7 @@ def _make_proxy(ctx, port):
 
 
 @operation(resumable=True)
+@handle_fabric_exception
 def run_script(ctx,
                script_path,
                fabric_env=None,
