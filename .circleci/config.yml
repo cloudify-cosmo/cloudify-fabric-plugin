@@ -312,7 +312,7 @@ jobs:
       - generate_rhel_py27py36_wagon
 
   build-bundle:
-    executor: wagon_generator
+    executor: py36
     steps:
       - checkout
       - build_archive
