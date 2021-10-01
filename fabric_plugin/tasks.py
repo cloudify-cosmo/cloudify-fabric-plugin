@@ -56,7 +56,7 @@ except ImportError:
     from cloudify.utils import CFY_EXEC_TEMPDIR_ENVVAR as ENV_CFY_EXEC_TEMPDIR
 
 from fabric_plugin import exec_env
-from fabric_plugin._compat import exec_, StringIO
+from fabric_plugin._compat import PY2, exec_, StringIO
 
 from cloudify.proxy.client import ScriptException
 
@@ -386,7 +386,7 @@ def run_commands(ctx,
     with ssh_connection(ctx, fabric_env) as conn:
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
-            run = conn.sudo if use_sudo else conn.run
+            run, command = handle_sudo(conn, use_sudo, command)
             result = run(command, hide=hide_value)
             _hide_or_display_results(hide_value, result)
 
@@ -562,6 +562,16 @@ def _make_proxy(ctx, port):
         proxy.close()
 
 
+def handle_sudo(conn, use_sudo, command):
+    # This is the only solution that works: https://stackoverflow.com/questions/54638426/python-fabric-sudo-su-user/54682223.  # noqa
+    if use_sudo and not PY2:
+        command = 'echo "{command}" | sudo su'.format(command=command)
+        run = conn.run
+    else:
+        run = conn.sudo if use_sudo else conn.run
+    return run, command
+
+
 @operation(resumable=True)
 @handle_fabric_exception
 def run_script(ctx,
@@ -588,7 +598,6 @@ def run_script(ctx,
                 process.get('base_dir'),
                 hide_value=hide_value
             ) as files:
-        run = conn.sudo if use_sudo else conn.run
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
         with _make_proxy(ctx, ctx_server_port) as proxy, \
@@ -615,6 +624,7 @@ def run_script(ctx,
             command = 'cd {0} && source {1} && {2}'.format(
                 cwd, files.remote_env_script_path, command)
             ctx.logger.info("Running command: %s", command)
+            run, command = handle_sudo(conn, use_sudo, command)
             result = run(command, hide=hide_value)
             _hide_or_display_results(hide_value, result)
 
