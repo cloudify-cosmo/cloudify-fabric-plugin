@@ -1,3 +1,4 @@
+2.0.9: Handle sudo.
 2.0.8: Add non_recoverable_error_exit_codes to raise NonRecoverableError if returned exit_code in the list
 2.0.7: Add backwards compatibility for fabric 1.x env inputs
 2.0.6: Added expand ~ in the path of key_filename for backwards compatibility
