@@ -565,7 +565,8 @@ def _make_proxy(ctx, port):
 def handle_sudo(conn, use_sudo, command):
     # This is the only solution that works: https://stackoverflow.com/questions/54638426/python-fabric-sudo-su-user/54682223.  # noqa
     if use_sudo and not PY2:
-        command = 'echo "{command}" | sudo su'.format(command=command)
+        nested_command = """{}""".format(command)
+        command = 'echo {command} | sudo su'.format(command=nested_command)
         run = conn.run
     else:
         run = conn.sudo if use_sudo else conn.run
