@@ -370,7 +370,7 @@ def _run_task(ctx, task, task_properties, fabric_env):
         return task(conn, **task_properties)
 
 
-def convert_shell_env(env: dict):
+def convert_shell_env(env):
     """Convert shell_env dict to string of env variables
     """
     env_str = ""
