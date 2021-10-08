@@ -1,3 +1,4 @@
+2.0.11: Fix Handle Sudo
 2.0.10: Handle nested strings in sudo in Py3.
 2.0.9: Handle sudo.
 2.0.8: Add non_recoverable_error_exit_codes to raise NonRecoverableError if returned exit_code in the list

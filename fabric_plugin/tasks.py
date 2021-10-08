@@ -370,6 +370,16 @@ def _run_task(ctx, task, task_properties, fabric_env):
         return task(conn, **task_properties)
 
 
+def convert_shell_env(env):
+    """Convert shell_env dict to string of env variables
+    """
+    env_str = ""
+    for key in env.keys():
+        env_str += "export {key}={value};".format(
+            key=key, value=str(env.get(key)))
+    return env_str
+
+
 @operation(resumable=True)
 @handle_fabric_exception
 def run_commands(ctx,
@@ -387,6 +397,9 @@ def run_commands(ctx,
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run, command = handle_sudo(conn, use_sudo, command)
+            if fabric_env.get('shell_env', {}):
+                command = convert_shell_env(
+                    fabric_env.get('shell_env')) + command
             result = run(command, hide=hide_value)
             _hide_or_display_results(hide_value, result)
 
@@ -563,10 +576,9 @@ def _make_proxy(ctx, port):
 
 
 def handle_sudo(conn, use_sudo, command):
-    # This is the only solution that works: https://stackoverflow.com/questions/54638426/python-fabric-sudo-su-user/54682223.  # noqa
     if use_sudo and not PY2:
-        nested_command = """{}""".format(command)
-        command = 'echo {command} | sudo su'.format(command=nested_command)
+        command = 'echo "{command}" | sudo -i --'.format(
+            command=command.strip('\n'))
         run = conn.run
     else:
         run = conn.sudo if use_sudo else conn.run
