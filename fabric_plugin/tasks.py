@@ -387,7 +387,8 @@ def run_commands(ctx,
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run, command = handle_sudo(conn, use_sudo, command)
-            result = run(command, hide=hide_value)
+# The 'env' parameter requires the SSH server parameter 'AcceptEnv' allowed to pass env variables 
+            result = run(command, hide=hide_value, env=fabric_env.get('shell_env', {}))
             _hide_or_display_results(hide_value, result)
 
 
@@ -564,7 +565,7 @@ def _make_proxy(ctx, port):
 
 def handle_sudo(conn, use_sudo, command):
     if use_sudo and not PY2:
-        command = 'sudo -i -- sh -c "{command}"'.format(command=command.strip('\n'))
+        command = 'echo "{command}" | sudo -i --'.format(command=command.strip('\n'))
         run = conn.run
     else:
         run = conn.sudo if use_sudo else conn.run
