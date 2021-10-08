@@ -370,6 +370,15 @@ def _run_task(ctx, task, task_properties, fabric_env):
         return task(conn, **task_properties)
 
 
+def convert_shell_env(env: dict) -> str:
+    """Convert shell_env dict to string of env variables
+    """
+    env_str = ""
+    for key in env.keys():
+        env_str += "export {key}={value};".format(key=key, value=str(env.get(key)))
+    return env_str
+
+
 @operation(resumable=True)
 @handle_fabric_exception
 def run_commands(ctx,
@@ -387,8 +396,9 @@ def run_commands(ctx,
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run, command = handle_sudo(conn, use_sudo, command)
-# The 'env' parameter requires the SSH server parameter 'AcceptEnv' allowed to pass env variables 
-            result = run(command, hide=hide_value, env=fabric_env.get('shell_env', {}))
+            if fabric_env.get('shell_env', {}):
+                command = convert_shell_env(fabric_env.get('shell_env')) + command
+            result = run(command, hide=hide_value)
             _hide_or_display_results(hide_value, result)
 
 
