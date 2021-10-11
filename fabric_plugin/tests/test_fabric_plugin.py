@@ -27,7 +27,7 @@ from cloudify.workflows import ctx as workflow_ctx
 from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import tasks
-from fabric_plugin._compat import StringIO, PY2
+from fabric_plugin._compat import StringIO
 
 
 class BaseFabricPluginTest(unittest.TestCase):
@@ -184,10 +184,7 @@ class FabricPluginTest(BaseFabricPluginTest):
     def _test_run_commands(self, use_sudo=False):
         commands = ['command1', 'command2']
         connection = MockConnection()
-        if PY2 and use_sudo:
-            run = 'sudo'
-        else:
-            run = 'run'
+        run = 'run'
         setattr(
             getattr(connection, run), 'return_value',
             Mock(stdout='Run command successfully', stderr='')
@@ -197,12 +194,9 @@ class FabricPluginTest(BaseFabricPluginTest):
             connection=connection,
             commands=commands,
             use_sudo=use_sudo)
-        if use_sudo and PY2:
-            mock_calls = self.conn.sudo.mock_calls
-        else:
-            mock_calls = self.conn.run.mock_calls
+        mock_calls = self.conn.run.mock_calls
         mock_commands = [args[0] for c, args, kwargs in mock_calls]
-        if use_sudo and not PY2:
+        if use_sudo:
             commands = ["echo '{}' | sudo -i --".format(c) for c in commands]
         self.assertEqual(commands, mock_commands)
 
@@ -349,10 +343,7 @@ class FabricPluginTest(BaseFabricPluginTest):
         with self.assertRaises(NonRecoverableError):
             commands = ['command1', 'command2']
             connection = MockConnection()
-            if use_sudo and PY2:
-                run = 'sudo'
-            else:
-                run = 'run'
+            run = 'run'
             setattr(
                 getattr(connection, run), 'side_effect',
                 CustomError({'return_code': 1})
