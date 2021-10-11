@@ -203,7 +203,7 @@ class FabricPluginTest(BaseFabricPluginTest):
             mock_calls = self.conn.run.mock_calls
         mock_commands = [args[0] for c, args, kwargs in mock_calls]
         if use_sudo and not PY2:
-            commands = ['echo "{}" | sudo -i --'.format(c) for c in commands]
+            commands = ["echo '{}' | sudo -i --".format(c) for c in commands]
         self.assertEqual(commands, mock_commands)
 
     def test_run_commands(self):

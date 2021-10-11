@@ -56,7 +56,7 @@ except ImportError:
     from cloudify.utils import CFY_EXEC_TEMPDIR_ENVVAR as ENV_CFY_EXEC_TEMPDIR
 
 from fabric_plugin import exec_env
-from fabric_plugin._compat import PY2, exec_, StringIO
+from fabric_plugin._compat import exec_, StringIO
 
 from cloudify.proxy.client import ScriptException
 
@@ -380,6 +380,19 @@ def convert_shell_env(env):
     return env_str
 
 
+def handle_shell_env(command,
+                     use_sudo=False,
+                     shell_env=None):
+    if not use_sudo:
+        command = convert_shell_env(shell_env) +\
+                  command
+    else:
+        command = command[:6] +\
+            convert_shell_env(shell_env) +\
+            command[6:]
+    return command
+
+
 @operation(resumable=True)
 @handle_fabric_exception
 def run_commands(ctx,
@@ -397,10 +410,10 @@ def run_commands(ctx,
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run, command = handle_sudo(conn, use_sudo, command)
-            if fabric_env.get('shell_env', {}):
-                command = convert_shell_env(
-                    fabric_env.get('shell_env')) + command
-            result = run(command, hide=hide_value)
+            command = handle_shell_env(command,
+                                       use_sudo,
+                                       fabric_env.get('shell_env', {}))
+            result = run(command, hide=hide_value, pty=True)
             _hide_or_display_results(hide_value, result)
 
 
@@ -576,12 +589,10 @@ def _make_proxy(ctx, port):
 
 
 def handle_sudo(conn, use_sudo, command):
-    if use_sudo and not PY2:
-        command = 'echo "{command}" | sudo -i --'.format(
+    if use_sudo:
+        command = "echo '{command}' | sudo -i --".format(
             command=command.strip('\n'))
-        run = conn.run
-    else:
-        run = conn.sudo if use_sudo else conn.run
+    run = conn.run
     return run, command
 
 
