@@ -22,6 +22,11 @@ executors:
     machine:
       image: ubuntu-1604:201903-01
 
+  arm_wagon_generator:
+    machine:
+      image: ubuntu-2004:202101-01
+      resource_class: arm.medium
+
 commands:
 
   flake8:
@@ -91,6 +96,25 @@ commands:
               git clone https://github.com/cloudify-cosmo/cloudify-wagon-build-containers.git
               docker build -t cloudify-centos-7-wagon-builder cloudify-wagon-build-containers/centos_7_py2py3
               docker run -v ~/project/:/packaging cloudify-centos-7-wagon-builder
+      - run:
+          name: copy wagon to workspace
+          command: cp *.wgn workspace/build/
+      - persist_to_workspace:
+          root: workspace
+          paths:
+            - build/*
+
+  generate_arch64_wagon:
+    steps:
+      - run:
+          name: Create Workspace Build directory.
+          command: mkdir -p workspace/build
+      - run:
+          name: Build py36 Wagon
+          command: |
+              git clone https://github.com/cloudify-cosmo/cloudify-wagon-build-containers.git
+              docker build -t centos_aarch64 cloudify-wagon-build-containers/aarch_64/centos_7_py3
+              docker run -v ~/project/:/packaging centos_aarch64
       - run:
           name: copy wagon to workspace
           command: cp *.wgn workspace/build/
@@ -299,6 +323,12 @@ jobs:
       - checkout
       - validate_documentation
 
+  arch64_wagon:
+    executor: arm_wagon_generator
+    steps:
+      - checkout
+      - generate_arch64_wagon
+
   wagon:
     executor: wagon_generator
     steps:
@@ -346,6 +376,10 @@ workflows:
           filters:
             branches:
               only: /([0-9\.]*\-build|master|dev)/
+      - arch64_wagon:
+          filters:
+            branches:
+              only: /([0-9\.]*\-build|master|dev)/
       - build-bundle:
           filters:
             branches:
@@ -353,6 +387,7 @@ workflows:
           requires:
             - wagon
             - rhel_wagon
+            - arch64_wagon
       - release:
           filters:
             branches:
