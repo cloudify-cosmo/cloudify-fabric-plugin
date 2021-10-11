@@ -405,6 +405,7 @@ def run_commands(ctx,
     :param commands: a list of commands to run
     :param fabric_env: fabric configuration
     """
+
     hide_value = _resolve_hide_value(kwargs.get('hide_output'))
     with ssh_connection(ctx, fabric_env) as conn:
         for command in commands:
