@@ -56,7 +56,7 @@ except ImportError:
     from cloudify.utils import CFY_EXEC_TEMPDIR_ENVVAR as ENV_CFY_EXEC_TEMPDIR
 
 from fabric_plugin import exec_env
-from fabric_plugin._compat import PY2, exec_, StringIO
+from fabric_plugin._compat import exec_, StringIO
 
 from cloudify.proxy.client import ScriptException
 
