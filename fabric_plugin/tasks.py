@@ -625,7 +625,7 @@ def run_script(ctx,
             ) as files:
         files.upload_script(local_script_path)
         fabric_ctx = _FabricCtx(ctx, files)
-        with _make_proxy(ctx, ctx_server_port) as proxy, \
+        with _make_proxy(fabric_ctx, ctx_server_port) as proxy, \
                 conn.forward_remote(proxy.port):
             env['PATH'] = '{0}:$PATH'.format(files.base_dir)
             env['PYTHONPATH'] = '{0}:$PYTHONPATH'.format(files.base_dir)
