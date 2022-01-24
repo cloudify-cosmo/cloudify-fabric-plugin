@@ -83,11 +83,13 @@ class BaseFabricPluginTest(unittest.TestCase):
 
         self.conn = connection or MockConnection()
         self.conn_factory = Mock(return_value=self.conn)
+        self.venv = MagicMock()
         with patch('fabric_plugin.tasks.Connection', self.conn_factory):
-            result = self.env.execute('execute_operation',
-                                      parameters={'operation': operation},
-                                      task_retry_interval=0,
-                                      task_retries=0)
+            with patch('fabric_plugin.tasks.venv', self.venv):
+                result = self.env.execute('execute_operation',
+                                          parameters={'operation': operation},
+                                          task_retry_interval=0,
+                                          task_retries=0)
         return result
 
 
@@ -396,5 +398,5 @@ class CustomError(Exception):
         self.result = tasks._AttributeDict(**result)
 
 
-def raise_custom_error(a, b, c, d):
+def raise_custom_error(a, b, c, d, e):
     raise CustomError({'return_code': 1})

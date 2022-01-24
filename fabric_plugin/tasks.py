@@ -325,6 +325,55 @@ def handle_fabric_exception(func):
     return f
 
 
+@contextmanager
+def venv(extra_packages=None, conn=None):
+    if not extra_packages:
+        try:
+            yield
+        finally:
+            return
+
+    if conn:
+        path = conn.run(
+            'python -c "import tempfile; print(tempfile.mkdtemp())"'
+            ).stdout.strip()
+        conn.sftp().put(
+            os.path.join(sys.prefix, 'virtualenv', 'virtualenv.tar.gz'),
+            os.path.join(path, 'virtualenv.tar.gz'))
+        conn.run(
+            'tar xvf {0}/virtualenv.tar.gz --strip-components=1 -C {0}'.format(
+                path))
+        conn.run(
+            'sed -i "s|{0}|{1}|g" {1}/bin/activate'.format(
+                '/home/centos/fabric_venv', path))
+        try:
+            with conn.cd(path):
+                with conn.prefix('source {0}/bin/activate'.format(path)):
+                    for i in extra_packages:
+                        conn.run('pip install "{0}"'.format(i))
+                    yield
+        finally:
+            conn.sudo('rm -rf {0}'.format(path))
+    else:
+        from cloudify.utils import LocalCommandRunner
+        path = tempfile.mkdtemp()
+        runner = LocalCommandRunner()
+        try:
+            runner.run([
+                sys.executable, '-m', 'virtualenv', path
+            ])
+            pip_command = "{0}/bin/pip".format(path)
+            for i in extra_packages:
+                runner.run(command=[pip_command, 'install', '--retries=2',
+                           '--timeout=15', '--force-reinstall', i], cwd=path)
+            site_path = os.sep.join([path, 'lib', 'python' + sys.version[:3],
+                                     'site-packages'])
+            sys.path.append(site_path)
+            yield
+        finally:
+            runner.run(['rm', '-rf', path])
+
+
 @operation(resumable=True)
 @handle_fabric_exception
 def run_task(ctx, tasks_file, task_name, fabric_env=None,
@@ -340,9 +389,12 @@ def run_task(ctx, tasks_file, task_name, fabric_env=None,
     if kwargs.get('hide_output'):
         ctx.logger.debug('`hide_output` input is not '
                          'supported for `run_task` operation')
-    func = _get_task(tasks_file, task_name)
-    ctx.logger.info('Running task: {0} from {1}'.format(task_name, tasks_file))
-    return _run_task(ctx, func, task_properties, fabric_env)
+    extra = kwargs.get('extra_packages', [])
+    with venv(extra):
+        func = _get_task(tasks_file, task_name)
+        ctx.logger.info('Running task: {0} from {1}'.format(
+            task_name, tasks_file))
+        return _run_task(ctx, func, task_properties, fabric_env, extra)
 
 
 @operation(resumable=True)
@@ -359,15 +411,18 @@ def run_module_task(ctx, task_mapping, fabric_env=None,
     if kwargs.get('hide_output'):
         ctx.logger.debug('`hide_output` input is not '
                          'supported for `run_module_task` operation')
-    task = _get_task_from_mapping(task_mapping)
-    ctx.logger.info('Running task: {0}'.format(task_mapping))
-    return _run_task(ctx, task, task_properties, fabric_env)
+    extra = kwargs.get('extra_packages', [])
+    with venv(extra):
+        task = _get_task_from_mapping(task_mapping)
+        ctx.logger.info('Running task: {0}'.format(task_mapping))
+        return _run_task(ctx, task, task_properties, fabric_env, extra)
 
 
-def _run_task(ctx, task, task_properties, fabric_env):
+def _run_task(ctx, task, task_properties, fabric_env, extra_packages):
     with ssh_connection(ctx, fabric_env) as conn:
-        task_properties = task_properties or {}
-        return task(conn, **task_properties)
+        with venv(extra_packages, conn):
+            task_properties = task_properties or {}
+            return task(conn, **task_properties)
 
 
 def convert_shell_env(env):
@@ -407,15 +462,17 @@ def run_commands(ctx,
     """
 
     hide_value = _resolve_hide_value(kwargs.get('hide_output'))
+    extra = kwargs.get('extra_packages', [])
     with ssh_connection(ctx, fabric_env) as conn:
-        for command in commands:
-            ctx.logger.info('Running command: {0}'.format(command))
-            run, command = handle_sudo(conn, use_sudo, command)
-            command = handle_shell_env(command,
-                                       use_sudo,
-                                       fabric_env.get('shell_env', {}))
-            result = run(command, hide=hide_value, pty=True)
-            _hide_or_display_results(hide_value, result)
+        with venv(extra, conn):
+            for command in commands:
+                ctx.logger.info('Running command: {0}'.format(command))
+                run, command = handle_sudo(conn, use_sudo, command)
+                command = handle_shell_env(command,
+                                           use_sudo,
+                                           fabric_env.get('shell_env', {}))
+                result = run(command, hide=hide_value, pty=True)
+                _hide_or_display_results(hide_value, result)
 
 
 class _FabricCtx(object):
@@ -617,6 +674,7 @@ def run_script(ctx,
     args = process.get('args')
     command_prefix = process.get('command_prefix')
     hide_value = _resolve_hide_value(kwargs.get('hide_output'))
+    extra = kwargs.get('extra_packages', [])
     with ssh_connection(ctx, fabric_env) as conn, \
             _RemoteFiles(
                 conn,
@@ -646,12 +704,13 @@ def run_script(ctx,
             env[CTX_SOCKET_URL] = proxy.socket_url
             env['LOCAL_{0}'.format(CTX_SOCKET_URL)] = proxy.socket_url
             files.upload_env_script(env)
-            command = 'cd {0} && source {1} && {2}'.format(
-                cwd, files.remote_env_script_path, command)
-            ctx.logger.info("Running command: %s", command)
-            run, command = handle_sudo(conn, use_sudo, command)
-            result = run(command, hide=hide_value)
-            _hide_or_display_results(hide_value, result)
+            with venv(extra, conn):
+                command = 'cd {0} && source {1} && {2}'.format(
+                    cwd, files.remote_env_script_path, command)
+                ctx.logger.info("Running command: %s", command)
+                run, command = handle_sudo(conn, use_sudo, command)
+                result = run(command, hide=hide_value)
+                _hide_or_display_results(hide_value, result)
 
         result = getattr(fabric_ctx, '_return_value', None)
         if isinstance(result, ScriptException):

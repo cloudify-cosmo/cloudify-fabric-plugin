@@ -44,5 +44,6 @@ setup(
     install_requires=[
         'cloudify-common>=4.5.5',
         'fabric2==2.5.0',
-    ]
+    ],
+    data_files=[('virtualenv', ['fabric_plugin/resources/virtualenv.tar.gz'])]
 )
