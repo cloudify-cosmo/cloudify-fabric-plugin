@@ -22,7 +22,7 @@ workflows:
       - node/check_py3_compat_job
       - node/unittests_job
       - node/validate_documentation_job
-      - node/validate_plugin_yamls
+      - node/validate_plugin_yamls_job
       - node/validate_version_job
       - wagonorb/wagon:
           filters:
@@ -49,7 +49,7 @@ workflows:
             branches:
               only: /master/
           requires:
-            - node/validate_plugin_yamls
+            - node/validate_plugin_yamls_job
             - wagonorb/build_bundle
             - node/unittests_job
             - wagonorb/wagon
