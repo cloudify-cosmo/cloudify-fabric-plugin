@@ -1,0 +1,19 @@
+##################################################################################
+# Cloudify Fabric built in types and plugins definitions.
+##################################################################################
+plugins:
+    fabric:
+        executor: central_deployment_agent
+        source: https://github.com/cloudify-cosmo/cloudify-fabric-plugin/archive/2.0.13.zip
+        package_name: cloudify-fabric-plugin
+        package_version: '2.0.13'
+
+blueprint_labels:
+  obj-type: 
+    values: 
+      - fabric
+
+labels:
+  obj-type: 
+    values: 
+      - fabric
