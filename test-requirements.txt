@@ -2,3 +2,7 @@ git+https://github.com/cloudify-cosmo/cloudify-common@master#egg=cloudify-common
 mock
 pytest
 pytest-cov
+coverage
+flake8
+nose
+nose-cov
