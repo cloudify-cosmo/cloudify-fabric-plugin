@@ -535,6 +535,20 @@ class _RemoteFiles(object):
             for key, value in env.items():
                 env_script.write('export {0}={1}\n'.format(key, value))
 
+    def folder_creator(self, dirs):
+        steps = '/'
+        for step in os.path.split(dirs):
+            steps = os.path.join(steps, step)
+            if self.exists(steps):
+                continue
+            try:
+                self._sftp.mkdir(steps)
+            except OSError as e:
+                if not self.exists(steps):
+                    ctx.logger.error(
+                        'Failed to make directory: {}.'.format(steps))
+                    raise e
+
     def _upload_ctx(self):
         self.remote_proxy_client_path = \
             '{0}/proxy_client'.format(self.base_dir)
@@ -544,9 +558,9 @@ class _RemoteFiles(object):
         self.remote_scripts_dir = '{0}/scripts'.format(self.base_dir)
 
         if not self.exists(self.remote_proxy_client_path):
-            self._sftp.mkdir(self.base_dir)
-            self._sftp.mkdir(self.remote_work_dir)
-            self._sftp.mkdir(self.remote_scripts_dir)
+            self.folder_creator(self.base_dir)
+            self.folder_creator(self.remote_work_dir)
+            self.folder_creator(self.remote_scripts_dir)
             self.put(
                 proxy_client.__file__.rstrip('c'),  # strip ".pyc" to ".py"
                 self.remote_proxy_client_path)
