@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import os
 import sys
 import json
@@ -693,9 +694,20 @@ def get_script(download_resource_func, script_path):
         script_path = tempfile.mktemp(suffix='-{0}'.format(suffix))
         with open(script_path, 'wb') as f:
             f.write(content)
-        return script_path
     else:
-        return download_resource_func(script_path)
+        script_path = download_resource_func(script_path)
+    remove_crlf(script_path)
+    return script_path
+
+
+def remove_crlf(script_path: str):
+    """ Remove CRLF by reading the file without newlines
+        and returning those lines to the file
+    """
+    with io.open(script_path, 'rt', newline='') as f:
+        lines = f.readlines()
+    with io.open(script_path, 'wt') as f:
+        f.writelines(lines)
 
 
 def _get_bin_dir():
