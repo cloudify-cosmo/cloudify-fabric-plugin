@@ -1,3 +1,4 @@
+2.0.15: Release dsl 1_4 yaml and redhat 8 wagon.
 2.0.14: Handle CRLF.
 2.0.13: Fix "ctx download-resource-and-render" and "ctx download-resource"
 2.0.12: Improve handling sudo and env vars
