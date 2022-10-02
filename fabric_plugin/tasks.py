@@ -635,6 +635,7 @@ def run_script(ctx,
     with ssh_connection(ctx, fabric_env) as conn, \
             _RemoteFiles(
                 conn,
+                local_script_path,
                 process.get('base_dir'),
                 hide_value=hide_value
             ) as files:
