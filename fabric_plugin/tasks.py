@@ -50,7 +50,6 @@ from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
-from cloudify_common_sdk.utils import get_node_instance_dir
 
 # This is done for 5.0.5 and older utils backward compatibility
 try:
@@ -708,9 +707,7 @@ def get_script(download_resource_func, script_path):
                                               response.status_code))
         content = response.text
         suffix = script_path.split('/')[-1]
-        dir_path = get_node_instance_dir()
-        script_path = tempfile.mktemp(suffix='-{0}'.format(suffix),
-                                      dir=dir_path)
+        script_path = tempfile.mktemp(suffix='-{0}'.format(suffix))
         with open(script_path, 'wb') as f:
             f.write(content)
     else:
