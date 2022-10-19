@@ -722,6 +722,8 @@ def remove_crlf(script_path: str):
     """
     with io.open(script_path, 'rt', newline='') as f:
         lines = f.readlines()
+    for idx, line in enumerate(lines):
+        lines[idx] = "{0}\n".format(line.rstrip())
     with io.open(script_path, 'wt') as f:
         f.writelines(lines)
 
