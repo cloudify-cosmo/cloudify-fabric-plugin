@@ -50,6 +50,7 @@ from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
+
 # This is done for 5.0.5 and older utils backward compatibility
 try:
     from cloudify.utils import ENV_CFY_EXEC_TEMPDIR
@@ -635,6 +636,7 @@ def run_script(ctx,
     with ssh_connection(ctx, fabric_env) as conn, \
             _RemoteFiles(
                 conn,
+                local_script_path,
                 process.get('base_dir'),
                 hide_value=hide_value
             ) as files:
