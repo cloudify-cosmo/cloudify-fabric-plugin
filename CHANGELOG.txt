@@ -1,3 +1,4 @@
+2.0.18: add __version__.py file in fabric_plugin folder.
 2.0.17: Add more handling for CRLF using strip lines
 2.0.16: RD-5466-improve-cloudify-fabric-plugin and orb fix
 2.0.15: Release dsl 1_4 yaml and redhat 8 wagon.
