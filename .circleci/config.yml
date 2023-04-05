@@ -1,9 +1,5 @@
 version: 2.1
 
-job-post-steps: &job-post-steps
-  post-steps:
-   - slack/notify_failed
-
 unittest-post-steps: &unittest-post-steps
   post-steps:
     - store_test_results:
