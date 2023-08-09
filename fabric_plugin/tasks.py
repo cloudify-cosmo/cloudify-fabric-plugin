@@ -28,7 +28,6 @@ from fabric2 import (
     Connection,
     task,
     Config,
-    config as fabric_config
 )
 from invoke import Task
 from paramiko import RSAKey, ECDSAKey, SSHException
@@ -233,6 +232,51 @@ def _hide_or_display_results(hide_value, result):
         _log_output(ctx, result.stdout, prefix='<err> ')
 
 
+def put_host(fabric_env, host_ip=None):
+    if 'host' not in fabric_env:
+        if 'host_string' in fabric_env:
+            fabric_env['host'] = fabric_env.pop('host_string')
+        elif host_ip:
+            fabric_env['host'] = host_ip
+        else:
+            raise NonRecoverableError('host ip is missing')
+
+
+def put_user(fabric_env, agent_user=None):
+    if 'user' not in fabric_env:
+        if agent_user:
+            fabric_env['user'] = agent_user
+        else:
+            raise NonRecoverableError('ssh user definition missing')
+
+
+def put_key_or_password(fabric_env, connect_kwargs, agent_key_path=None):
+    pkey = fabric_env.get('connect_kwargs', {}).get('pkey')
+    if pkey:
+        fabric_env['connect_kwargs']['pkey'] = _load_private_key(pkey)
+    elif fabric_env.get('key'):
+        connect_kwargs['pkey'] = _load_private_key(fabric_env['key'])
+    elif fabric_env.get('key_filename'):
+        connect_kwargs['key_filename'] = os.path.expanduser(
+            fabric_env['key_filename'])
+    elif fabric_env.get('password'):
+        connect_kwargs['password'] = fabric_env['password']
+    elif agent_key_path:
+        connect_kwargs['key_filename'] = os.path.expanduser(agent_key_path)
+    else:
+        raise NonRecoverableError('key_filename/key or password missing')
+
+
+def prepare_fabric2_env(fabric2_env, fabric_env, connect_kwargs):
+    fabric2_env['connect_kwargs'] = fabric_env.setdefault(
+        'connect_kwargs', connect_kwargs)
+    fabric2_env['run'] = fabric_env.setdefault('run', {})
+    fabric2_env['sudo'] = fabric_env.setdefault('sudo', {})
+    fabric2_env['timeouts'] = fabric_env.setdefault('timeouts', {})
+    fabric2_env['user'] = fabric_env.pop('user')
+    fabric2_env['port'] = fabric_env.get('port', 22)
+
+
 @contextmanager
 def ssh_connection(ctx, fabric_env):
     """Make and establish a fabric ssh connection.
@@ -244,66 +288,50 @@ def ssh_connection(ctx, fabric_env):
 
     :return: a fabric.Connection instance
     """
+
     for name, value in FABRIC_ENV_DEFAULTS.items():
         fabric_env.setdefault(name, value)
 
-    if 'host' not in fabric_env:
-        if 'host_string' in fabric_env:
-            fabric_env['host'] = fabric_env.pop('host_string')
-        else:
-            fabric_env['host'] = ctx.instance.host_ip
+    try:
+        host_ip = ctx.instance.host_ip
+        agent_user = ctx.bootstrap_context.cloudify_agent.user
+        agent_key_path = ctx.bootstrap_context.cloudify_agent.agent_key_path
+    except NonRecoverableError as e:
+        ctx.logger.error(
+            'Failed to find potentially required data '
+            'from context: {}'.format(str(e)))
+        host_ip = None
+        agent_user = None
+        agent_key_path = None
 
-    if 'user' not in fabric_env:
-        fabric_env['user'] = ctx.bootstrap_context.cloudify_agent.user
-        if not fabric_env['user']:
-            raise NonRecoverableError('ssh user definition missing')
-
+    put_host(fabric_env, host_ip)
+    put_user(fabric_env, agent_user)
     connect_kwargs = {}
-    pkey = fabric_env.get('connect_kwargs', {}).get('pkey')
-    if pkey:
-        fabric_env['connect_kwargs']['pkey'] = _load_private_key(pkey)
-    elif fabric_env.get('key'):
-        connect_kwargs['pkey'] = _load_private_key(fabric_env['key'])
-    elif fabric_env.get('key_filename'):
-        connect_kwargs['key_filename'] = \
-            os.path.expanduser(fabric_env['key_filename'])
-    elif fabric_env.get('password'):
-        connect_kwargs['password'] = fabric_env['password']
-    elif ctx.bootstrap_context.cloudify_agent.agent_key_path:
-        connect_kwargs['key_filename'] = \
-            os.path.expanduser(
-                ctx.bootstrap_context.cloudify_agent.agent_key_path)
-    else:
-        raise NonRecoverableError('key_filename/key or password missing')
+    put_key_or_password(
+        fabric_env,
+        connect_kwargs,
+        agent_key_path)
 
     host = fabric_env.pop('host')
     # Prepare the fabric2 env inputs if they passed
     fabric2_env = {}
-    fabric2_env['connect_kwargs'] = fabric_env.setdefault(
-        'connect_kwargs',
-        connect_kwargs
-    )
-    fabric2_env['run'] = fabric_env.setdefault('run', {})
-    fabric2_env['sudo'] = fabric_env.setdefault('sudo', {})
-    fabric2_env['timeouts'] = fabric_env.setdefault('timeouts', {})
-    fabric2_env['user'] = fabric_env.pop('user')
+    prepare_fabric2_env(fabric2_env, fabric_env, connect_kwargs)
     overrides = {'overrides':  fabric2_env}
 
     # Convert fabric 1.x inputs to fabric 2.x
     fabric_env = _AttributeDict(**fabric_env)
     config = Config.from_v1(fabric_env, **overrides)
+
     if not config["timeouts"].get("command"):
         config["timeouts"]["command"] = fabric_env.command_timeout
     if fabric_env.connect_timeout != 10:
         config["timeouts"]['connect'] = fabric_env.connect_timeout
-    fabric_env = fabric_config.merge_dicts(
-        Config.global_defaults(), config)
-    fabric_env = Config(overrides=fabric_env)
+
     fabric_env_config = {
         'host': host,
-        'user': fabric_env['user'],
-        'port': fabric_env['port'],
-        'config': fabric_env
+        'user': fabric2_env['user'],
+        'port': fabric2_env['port'],
+        'config': config
     }
     conn = Connection(**fabric_env_config)
     try:

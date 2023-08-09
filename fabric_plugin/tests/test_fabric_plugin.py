@@ -28,9 +28,18 @@ from cloudify.exceptions import NonRecoverableError
 
 from fabric_plugin import tasks
 from fabric_plugin._compat import StringIO
+from fabric_plugin.tests.constants import (
+    CONFIG_ARG,
+    SET_DEFAULTS,
+)
+from fabric2 import Config
 
 
 class BaseFabricPluginTest(unittest.TestCase):
+
+    def get_node_instance_ip(self, *_, **__):
+        return self.host_ip
+
     def setUp(self):
         self.default_fabric_env = {
             'host_string': 'test',
@@ -38,7 +47,9 @@ class BaseFabricPluginTest(unittest.TestCase):
             'key_filename': 'test',
         }
         self.bootstrap_context = {}
+        self.host_ip = None
         LocalEndpoint.get_bootstrap_context = lambda _: self.bootstrap_context
+        LocalEndpoint.get_host_node_instance_ip = self.get_node_instance_ip
 
     def _execute(self,
                  operation,
@@ -59,6 +70,8 @@ class BaseFabricPluginTest(unittest.TestCase):
 
         bootstrap_context = bootstrap_context or {}
         self.bootstrap_context.update(bootstrap_context)
+        if ip:
+            self.host_ip = ip
 
         inputs = {
             'fabric_env': fabric_env or self.default_fabric_env,
@@ -375,6 +388,61 @@ class FabricPluginTest(BaseFabricPluginTest):
                     task_mapping='fabric_plugin.tests.test_fabric_plugin'
                                  '.module_task',
                     non_recoverable_error_exit_codes=[1, 2])
+
+
+class MoreFabricPluginTest(unittest.TestCase):
+
+    @patch('fabric2.config.get_local_user')
+    @patch('invoke.runners.Local')
+    @patch('os.path.expanduser')
+    @patch('os.path.exists')
+    @patch('fabric_plugin.tasks._load_private_key')
+    def test_ssh_connection(self,
+                            mock_load_private_key,
+                            mock_os_path_exists,
+                            mock_os_path_expanduser,
+                            mock_local,
+                            mock_get_local_user):
+
+        mock_load_private_key.return_value = 'mock_load_private_key'
+
+        mock_os_path_exists.return_value = True
+        mock_os_path_expanduser.return_value = '/mock_os_path_expanduser/'
+
+        mock_local.return_value = 'mock_local'
+        mock_get_local_user.return_value = 'foo_user'
+
+        mock_ctx = Mock()
+        mock_ctx_instance = Mock(host_ip='200.200.200.200')
+        mock_ctx.instance = mock_ctx_instance
+        mock_cloudify_agent = Mock(user='bar_user',
+                                   agent_key_path='bar_key_path')
+        mock_bootstrap_context = Mock(cloudify_agent=mock_cloudify_agent)
+        mock_ctx.bootstrap_context = mock_bootstrap_context
+
+        mock_fabric_env = {
+            'host': 'foo_host',
+            'user': 'foo_user',
+            'port': 22222,
+        }
+        with patch('fabric_plugin.tasks.Connection') as mock_conn:
+            with tasks.ssh_connection(mock_ctx, mock_fabric_env):
+                expected_config = Config(CONFIG_ARG)
+                for key, value in SET_DEFAULTS.items():
+                    expected_config.setdefault(key, value)
+                expected_config.setdefault(
+                    'runners',
+                    {
+                        'local': mock_local,
+                    }
+                )
+                expected_call = {
+                    'host': 'foo_host',
+                    'user': 'foo_user',
+                    'port': 22222,
+                    'config': expected_config,
+                }
+                mock_conn.assert_called_with(**expected_call)
 
 
 @workflow
