@@ -36,16 +36,14 @@ workflows:
           <<: *unittest-post-steps
       - node/validate_documentation_job
       - node/validate_version_job
-      - wagonorb/wagon
-      - wagonorb/wagon_311
-      # - wagonorb/wagon:
-      #     filters:
-      #       branches:
-      #         only: /([0-9\.]*\-build|master|dev)/
-      # - wagonorb/wagon_311:
-      #     filters:
-      #       branches:
-      #         only: /([0-9\.]*\-build|master|dev)/
+      - wagonorb/wagon:
+          filters:
+            branches:
+              only: /([0-9\.]*\-build|master|dev)/
+      - wagonorb/wagon_311:
+          filters:
+            branches:
+              only: /([0-9\.]*\-build|master|dev)/
       - wagonorb/arch64_wagon:
           filters:
             branches:
