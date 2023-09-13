@@ -1,3 +1,4 @@
+2.0.20: Added Py311 wagon.
 2.0.19: Fix issue that prevented user provided SSH port from being used.
 2.0.18: add __version__.py file in fabric_plugin folder.
 2.0.17: Add more handling for CRLF using strip lines
