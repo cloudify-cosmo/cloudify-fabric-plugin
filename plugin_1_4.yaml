@@ -1,5 +1,5 @@
 ##################################################################################
-# Cloudify Fabric built in types and plugins definitions.
+# Cloudify Fabric built in types and plugins definitions. 
 ##################################################################################
 plugins:
     fabric:
