@@ -57,9 +57,19 @@ except ImportError:
     from cloudify.utils import CFY_EXEC_TEMPDIR_ENVVAR as ENV_CFY_EXEC_TEMPDIR
 
 from fabric_plugin import exec_env
-from fabric_plugin._compat import exec_, StringIO
+from fabric_plugin._compat import exec_, StringIO, PY311
 
 from cloudify.proxy.client import ScriptException
+
+# fix inspect compatiblity
+import inspect
+try:
+    # in python 3.11 getargspec was removed in favor of getfullargspec
+    if PY311:
+        from inspect import getfullargspec
+        inspect.getargspec = getfullargspec
+except ImportError:
+    pass
 
 
 ILLEGAL_CTX_OPERATION_ERROR = RuntimeError('ctx may only abort or return once')
