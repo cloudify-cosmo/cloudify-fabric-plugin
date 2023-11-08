@@ -1,0 +1,40 @@
+diff --git a/constraints.txt b/constraints.txt
+index 6d405fb..e69de29 100644
+--- a/constraints.txt
++++ b/constraints.txt
+@@ -1 +0,0 @@
+-cryptography==3.2.1
+diff --git a/dev-requirements.txt b/dev-requirements.txt
+index e69de29..be35a02 100644
+--- a/dev-requirements.txt
++++ b/dev-requirements.txt
+@@ -0,0 +1 @@
++-e fusion-common
+\ No newline at end of file
+diff --git a/setup.py b/setup.py
+index 38c63a7..6669719 100644
+--- a/setup.py
++++ b/setup.py
+@@ -15,7 +15,7 @@
+ import os
+ import re
+ import pathlib
+-from setuptools import setup
++from setuptools import setup, find_packages
+ 
+ 
+ def get_version():
+@@ -31,11 +31,11 @@ setup(
+     version=get_version(),
+     author='Cloudify',
+     author_email='hello@cloudify.co',
+-    packages=['fabric_plugin'],
++    packages=find_packages(),
+     license='LICENSE',
+     description='Plugin for remotely running fabric tasks and commands',
+     install_requires=[
+-        'cloudify-common>=4.5.5',
++        'fusion-common',
+         'fabric2==2.5.0',
+     ]
+ )

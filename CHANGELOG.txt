@@ -1,3 +1,4 @@
+2.0.23: adjust python 3.11 patch.
 2.0.22: Add DSL 1.5 plugin YAML.
 2.0.21: fix tasks to be compatible with py311.
 2.0.20: Added Py311 wagon.
