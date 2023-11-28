@@ -14,8 +14,9 @@
 
 import os
 import re
+import sys
 import pathlib
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 def get_version():
@@ -26,16 +27,28 @@ def get_version():
         return re.search(r'\d+.\d+.\d+', var).group()
 
 
+install_requires = [
+    'fabric2==2.5.0'
+]
+
+if sys.version_info.major == 3 and sys.version_info.minor == 6:
+    packages = ['fabric_plugin']
+    install_requires += [
+        'cloudify-common>=4.5.5',
+    ]
+else:
+    packages = find_packages()
+    install_requires += [
+        'fusion-common',
+    ]
+
 setup(
     name='cloudify-fabric-plugin',
     version=get_version(),
     author='Cloudify',
     author_email='hello@cloudify.co',
-    packages=['fabric_plugin'],
+    packages=packages,
     license='LICENSE',
     description='Plugin for remotely running fabric tasks and commands',
-    install_requires=[
-        'cloudify-common>=4.5.5',
-        'fabric2==2.5.0',
-    ]
+    install_requires=install_requires
 )

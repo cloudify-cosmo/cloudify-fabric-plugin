@@ -100,3 +100,6 @@ local-storage/
 plugin_docs
 workspace
 *.wgn
+fusion-agent
+fusion-common
+fusion-manager
