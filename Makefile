@@ -1,39 +1,13 @@
-.PHONY: release install files test docs prepare publish
-
-all:
-	@echo "make release - prepares a release and publishes it"
-	@echo "make dev - prepares a development environment"
-	@echo "make install - install on local system"
-	@echo "make files - update changelog and todo files"
-	@echo "make test - run tox"
-	@echo "make docs - build docs"
-	@echo "prepare - prepare module for release (CURRENTLY IRRELEVANT)"
-	@echo "make publish - upload to pypi"
-
-release: test docs publish
-
-dev:
-	pip install -rdev-requirements.txt
-	python setup.py develop
-
-install:
-	python setup.py install
-
-files:
-	grep '# TODO' -rn * --exclude-dir=docs --exclude-dir=build --exclude=TODO.md | sed 's/: \+#/:    # /g;s/:#/:    # /g' | sed -e 's/^/- /' | grep -v Makefile > TODO.md
-	git log --oneline --decorate --color > CHANGELOG
-
-test:
-	pip install tox
-	tox
-
-docs:
-	pip install sphinx sphinx-rtd-theme
-	cd docs && make html
-	pandoc README.md -f markdown -t rst -s -o README.rst
-
-prepare:
-	python scripts/make-release.py
-
-publish:
-	python setup.py sdist upload
+download:
+ifeq (,$(wildcard ./fusion-agent))
+	git clone https://${GH_USER}:${GITHUB_PASSWORD}@eos2git.cec.lab.emc.com/ISG-Edge/fusion-agent.git && cd './fusion-agent' && git checkout rel/magicp1-2.0.0 && cd ..
+endif
+ifeq (,$(wildcard ./fusion-common))
+	git clone https://${GH_USER}:${GITHUB_PASSWORD}@eos2git.cec.lab.emc.com/ISG-Edge/fusion-common.git && cd './fusion-common' && git checkout rel/magicp1-2.0.0 && cd ..
+endif
+ifeq (,$(wildcard ./fusion-manager))
+	git clone https://${GH_USER}:${GITHUB_PASSWORD}@eos2git.cec.lab.emc.com/ISG-Edge/fusion-manager.git && cd './fusion-manager' && git checkout rel/magicp1-2.0.0 && cd ..
+endif
+ifeq (,$(wildcard ./cloudify-utilities-plugins-sdk))
+	git clone https://github.com/cloudify-incubator/cloudify-utilities-plugins-sdk.git && cd './cloudify-utilities-plugins-sdk' && git checkout fusion && cd ..
+endif
