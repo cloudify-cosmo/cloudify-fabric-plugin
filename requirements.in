@@ -2,4 +2,3 @@
 -e fusion-manager/mgmtworker
 -e fusion-agent
 cryptography>=41.0.5
-networkx>=2.5.1,<2.6

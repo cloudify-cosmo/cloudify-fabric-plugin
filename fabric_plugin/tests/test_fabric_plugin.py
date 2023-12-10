@@ -359,7 +359,9 @@ class FabricPluginTest(BaseFabricPluginTest):
             run = 'run'
             setattr(
                 getattr(connection, run), 'side_effect',
-                CustomError({'return_code': 1})
+                CustomError({'return_code': 1,
+                             'stdout': '',
+                             'stderr': 'error'})
             )
             self._execute(
                 'test.run_commands',
@@ -465,4 +467,4 @@ class CustomError(Exception):
 
 
 def raise_custom_error(a, b, c, d):
-    raise CustomError({'return_code': 1})
+    raise CustomError({'return_code': 1, 'stdout': '', 'stderr': 'error'})

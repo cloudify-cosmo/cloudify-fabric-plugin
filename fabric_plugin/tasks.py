@@ -30,6 +30,7 @@ from fabric2 import (
     Config,
 )
 from invoke import Task
+from invoke.watchers import StreamWatcher
 from paramiko import RSAKey, ECDSAKey, SSHException
 
 # This is done because on 5.0.5 manager and older we will have
@@ -49,6 +50,8 @@ from cloudify.proxy.client import CTX_SOCKET_URL
 from cloudify.proxy import client as proxy_client
 from cloudify.proxy import server as proxy_server
 from cloudify.exceptions import NonRecoverableError
+from cloudify.state import current_ctx
+from cloudify.utils import _get_current_context
 
 # This is done for 5.0.5 and older utils backward compatibility
 try:
@@ -92,6 +95,28 @@ FABRIC_ENV_DEFAULTS = {
     'use_ssh_config': False,
     'warn_only': False,
 }
+
+
+# Class to handle stdout from fabric Connection
+class OutputWatcher(StreamWatcher):
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.already_logged = []
+
+    def _log_output(self, lines):
+        for line in lines:
+            self.ctx.logger.debug(line.rstrip())
+
+    def submit(self, stream):
+        lines = stream.splitlines()
+        lines = lines[len(self.already_logged):]
+        if self.ctx is not None:
+            with current_ctx.push(self.ctx):
+                self._log_output(lines)
+        else:
+            self._log_output(lines)
+        self.already_logged.extend(lines)
+        return []
 
 
 # inspired by fabric 1.x https://github.com/fabric/fabric/blob/1.10/fabric/utils.py#L186 # NOQA
@@ -239,7 +264,7 @@ def _hide_or_display_results(hide_value, result):
     elif hide_value == "out":
         _log_output(ctx, result.stderr, prefix='<err> ')
     elif hide_value == 'err':
-        _log_output(ctx, result.stdout, prefix='<err> ')
+        _log_output(ctx, result.stdout, prefix='<out> ')
 
 
 def put_host(fabric_env, host_ip=None):
@@ -288,7 +313,7 @@ def prepare_fabric2_env(fabric2_env, fabric_env, connect_kwargs):
 
 
 @contextmanager
-def ssh_connection(ctx, fabric_env):
+def ssh_connection(ctx, fabric_env, hide_output=True):
     """Make and establish a fabric ssh connection.
 
     :param ctx: cloudify operation context
@@ -337,6 +362,11 @@ def ssh_connection(ctx, fabric_env):
     if fabric_env.connect_timeout != 10:
         config["timeouts"]['connect'] = fabric_env.connect_timeout
 
+    # if we are not hiding let's show response stream as we get it
+    if not hide_output:
+        config['run'] = {}
+        config['run']['watchers'] = [OutputWatcher(_get_current_context())]
+
     fabric_env_config = {
         'host': host,
         'user': fabric2_env['user'],
@@ -357,6 +387,26 @@ def handle_fabric_exception(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
+            ctx.logger.error('Exception Happend: {0}'.format(str(e)))
+            if hasattr(e, 'result'):
+                fab_err_code = \
+                    e.result.return_code if hasattr(e.result, 'return_code') \
+                    else 'NA'
+                fab_stdout = \
+                    e.result.stdout if hasattr(e.result, 'stdout') else 'NA'
+                fab_stderr = \
+                    e.result.stderr if hasattr(e.result, 'stderr') else 'NA'
+                ctx.logger.error(
+                    'Fabric Results:\n'
+                    '---------------------------------'
+                    '\nreturn_code: {0}\n'
+                    '---------------------------------'
+                    '\nstdout:\n{1}\n'
+                    '---------------------------------'
+                    '\nstderr:\n{2}\n'
+                    '---------------------------------'.format(
+                        fab_err_code, fab_stdout, fab_stderr))
+
             exit_codes = kwargs.get('non_recoverable_error_exit_codes', [])
             if hasattr(e, 'result')\
                     and e.result.return_code in exit_codes:
@@ -447,7 +497,7 @@ def run_commands(ctx,
     """
 
     hide_value = _resolve_hide_value(kwargs.get('hide_output'))
-    with ssh_connection(ctx, fabric_env) as conn:
+    with ssh_connection(ctx, fabric_env, hide_value) as conn:
         for command in commands:
             ctx.logger.info('Running command: {0}'.format(command))
             run, command = handle_sudo(conn, use_sudo, command)
@@ -671,7 +721,7 @@ def run_script(ctx,
     args = process.get('args')
     command_prefix = process.get('command_prefix')
     hide_value = _resolve_hide_value(kwargs.get('hide_output'))
-    with ssh_connection(ctx, fabric_env) as conn, \
+    with ssh_connection(ctx, fabric_env, hide_value) as conn, \
             _RemoteFiles(
                 conn,
                 local_script_path,
