@@ -1,3 +1,4 @@
+2.0.26: added .drp folder for trufflehog.
 2.0.25: Implement getting stdout/stderr while execution.
 2.0.24: Rerelease with requirements change.
 2.0.23: adjust python 3.11 patch.
