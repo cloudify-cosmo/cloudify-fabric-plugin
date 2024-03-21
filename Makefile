@@ -7,11 +7,7 @@ NATIVEEDGE_SDK := cloudify-utilities-plugins-sdk
 INCUBATOR_DOMAIN := github.com/cloudify-incubator
 BRANCH := master
 SHELL := /bin/bash
-ifneq ($(GH_USER),)
-	DOMAIN=${GH_USER}:${GITHUB_PASSWORD}@eos2git.cec.lab.emc.com/ISG-Edge
-else
-	DOMAIN=${GH_TOKEN}@github.com/fusion-e
-endif
+DOMAIN=${GH_TOKEN}@github.com/fusion-e
 
 default:
 	make download_from_git
