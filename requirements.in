@@ -1,7 +1,5 @@
--e fusion-common
--e fusion-manager/mgmtworker
--e fusion-agent
+-e ${HOME}/fusion-common
+-e ${HOME}/fusion-manager/mgmtworker
+-e ${HOME}/fusion-agent
+-e ${HOME}/cloudify-utilities-plugins-sdk
 cryptography>=42.0.5
-jinja2>=3.1.3
-paramiko>=3.4.0
-pycryptodomex>=3.20.0
