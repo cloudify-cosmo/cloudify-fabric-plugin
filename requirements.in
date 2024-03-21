@@ -1,4 +1,5 @@
--e fusion-common
--e fusion-manager/mgmtworker
--e fusion-agent
-cryptography>=41.0.5
+-e ${HOME}/fusion-common
+-e ${HOME}/fusion-manager/mgmtworker
+-e ${HOME}/fusion-agent
+-e ${HOME}/cloudify-utilities-plugins-sdk
+cryptography>=42.0.5
